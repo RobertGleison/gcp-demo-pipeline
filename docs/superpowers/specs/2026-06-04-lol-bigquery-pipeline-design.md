@@ -6,10 +6,11 @@
 
 ## Purpose
 
-Build a fully Terraform-provisioned GCP data pipeline that extracts League of
+Build a Terraform-provisioned GCP data pipeline that extracts League of
 Legends match data from the Riot Games API, ingests it through Pub/Sub, lands it
 in BigQuery, transforms JSON into a columnar star schema via ELT, and serves a
-Looker Studio dashboard.
+Looker Studio dashboard. "Terraform-provisioned" covers the infrastructure; a few
+data/content steps are deliberately manual (see **Manual / out-of-band steps**).
 
 The project's primary goal is **hands-on practice for the GCP Professional Data
 Engineer certification**, using a $300 free-trial account. Architectural choices
@@ -34,6 +35,14 @@ favor exam-relevant services and tight cost control over production realism.
 interval (default every 30 min). Compute scales to zero between runs. No
 always-on workers.
 
+## Project & Region
+
+Single GCP project, single region. Defaults: **`us-central1`** for Cloud Run,
+Scheduler, Pub/Sub, Artifact Registry, and Dataform; BigQuery dataset location
+**`US`** (multi-region). These must stay aligned — a Pub/Sub **BigQuery
+subscription cannot write across regions**, and Dataform/Cloud Run must target the
+same BQ location. The region/location live in `common.tfvars`.
+
 ## Architecture
 
 ```
@@ -57,9 +66,10 @@ Cloud Scheduler ──(every 30 min)──▶ Cloud Run Job (Python extractor)
 
 | Layer | Service | Rationale |
 |---|---|---|
-| Trigger | Cloud Scheduler | Cron-driven bursts, ~free. DE-exam orchestration topic. |
+| Trigger | Cloud Scheduler | Cron-driven bursts, ~free. DE-exam orchestration topic. Triggers the job via its own SA (`run.jobs.run`). |
 | Extract | Cloud Run Job (Python) | Calls Riot API, publishes to Pub/Sub. Scales to zero. |
-| Secrets | Secret Manager | Holds the Riot API key. |
+| Image | Artifact Registry + Cloud Build | Hosts the extractor container image; built/pushed before the `ingest` apply. |
+| Secrets | Secret Manager | Holds the Riot API key (and the Dataform Git token). |
 | Ingest | Pub/Sub (topic + DLQ) | Mandatory; decouples extract from load. |
 | Land | Pub/Sub → BigQuery subscription | Writes raw JSON straight to BQ, no code/Dataflow. |
 | Transform | Dataform (ELT in BigQuery) | JSON → typed star schema, incremental MERGE. |
@@ -78,10 +88,11 @@ Cloud Scheduler ──(every 30 min)──▶ Cloud Run Job (Python extractor)
 
 ### Extractor (Cloud Run Job, each schedule tick)
 
-1. Read a small **seed list** of players (PUUIDs / riot-ids) from config —
-   e.g. 5–20 tracked accounts. Default region: `americas` routing / `na1`
-   platform (configurable).
-2. For each player: call `match-v5` for recent match IDs (last N, e.g. 10).
+1. Read a small **seed list** of players as **Riot IDs** (`gameName#tagLine`) from
+   config — e.g. 5–20 tracked accounts. Default region: `americas` routing / `na1`
+   platform (configurable). Summoner-name lookup is deprecated, so resolve each
+   Riot ID → PUUID via `account-v1` (by-riot-id) first.
+2. For each PUUID: call `match-v5` for recent match IDs (last N, e.g. 10).
 3. Skip match IDs already seen (lookup against a small `seen_matches` table or
    the marts) to limit API calls and duplicates.
 4. For each new match: fetch full match JSON, publish one Pub/Sub message with
@@ -106,12 +117,29 @@ expiration (raw is disposable).
 - **marts.dim_champion**, **marts.dim_player** — small dimension tables.
 - **marts.fct_match_participants** — fact table, **partitioned by `game_date`**,
   **clustered by `champion_id, queue_id`**. Built **incrementally** with `MERGE`
-  keyed on `(match_id, participant_id)` → idempotent, re-run safe, no dupes.
+  keyed on `(match_id, participant_id)`. New rows are selected from `raw` using a
+  **`publish_time` watermark** (`> max(publish_time)` already processed) →
+  idempotent, re-run safe, no dupes.
+
+**How the SQLX gets into Dataform:** the `dataform/` directory in *this* repo is
+the source of truth; the `google_dataform_repository` resource connects to it via
+a **Git remote + access token stored in Secret Manager**. Dataform is not fed by
+Terraform inline.
+
+**How the transform is triggered:** a Dataform **workflow configuration** runs the
+release on its own cron (default every 30 min), independent of the extractor.
+End-to-end freshness is therefore the max of the extractor and Dataform intervals.
+(The optional Cloud Workflows module in *Future* would chain them into one DAG.)
 
 ### Serving — Looker Studio
 
 Dashboards on the marts: win rate by champion, KDA distributions, gold/damage
 curves, game-duration trends, per-player scorecards.
+
+**Gotcha:** because `fct_match_participants` has **require-partition-filter**
+enabled, every Looker Studio query must include a `game_date` filter — build the
+report with a date-range control bound to `game_date`, or queries error. Dimension
+tables are unpartitioned and unaffected.
 
 ## Repository Layout
 
@@ -133,7 +161,7 @@ gcp-demo-pipeline/
 ├── envs/
 │   └── dev/                       # the only environment (one GCP project)
 │       ├── common.tfvars          # project_id, region, dataset names, schedule, seed players
-│       ├── bootstrap/             # one-time: GCS state bucket, enable APIs, budget alerts
+│       ├── bootstrap/             # one-time: GCS state bucket, enable APIs, budget alerts, Artifact Registry repo
 │       ├── iam/                   # service accounts → outputs SA emails
 │       ├── warehouse/             # BigQuery datasets (reads iam state)
 │       ├── ingest/                # Pub/Sub + BQ subscription + extractor (reads iam + warehouse)
@@ -156,18 +184,24 @@ gcp-demo-pipeline/
   `ingest`, and `transform` read the `iam` layer's outputs (SA emails); `ingest` and
   `transform` also read `warehouse` outputs (dataset/table IDs). No hard-coded names.
 - **Apply order** (each is an independent `terraform apply`):
-  `bootstrap → iam → warehouse → ingest → transform`. Looker Studio is wired manually.
+  `bootstrap → iam → warehouse →` **build & push extractor image** `→ ingest →
+  transform`. The image must exist in Artifact Registry before `ingest` applies
+  (its `cloudrun_extractor` module references the image URI). Looker Studio is
+  wired manually.
 - `common.tfvars` is passed to each layer (`-var-file=../common.tfvars`), the
   single-file stand-in for infrastructure-live's cascading `common.yaml`.
 
 ## IAM (least privilege)
 
-- `sa-extractor`: `pubsub.publisher` on the topic, `secretmanager.secretAccessor`
-  on the key, `run.invoker`. Nothing else.
+- `sa-extractor` (Cloud Run Job **runtime** identity): `pubsub.publisher` on the
+  topic, `secretmanager.secretAccessor` on the Riot key. Nothing else.
+- `sa-scheduler` (Cloud Scheduler identity that **triggers** the job):
+  `run.developer` (or a custom role granting `run.jobs.run`) on the job. Cloud Run
+  **Jobs** need `run.jobs.run` — `run.invoker` (Services only) is not sufficient.
 - `sa-pubsub-bq`: `bigquery.dataEditor` on the `raw` dataset only (used by the
-  BQ subscription).
+  BQ subscription). Pub/Sub's own service agent also needs this granted.
 - `sa-dataform`: `bigquery.dataEditor` + `bigquery.jobUser` scoped to the
-  datasets it builds.
+  datasets it builds, plus `secretmanager.secretAccessor` on the Dataform Git token.
 - No use of the default compute SA; no project-level `editor`.
 
 ## Cost Controls
@@ -179,6 +213,12 @@ gcp-demo-pipeline/
   negligible.
 - Nothing always-on (no Dataflow, no Composer).
 - **Realistic burn: a few dollars total** at this volume.
+- **Free-trial safety net:** trial accounts do not auto-charge past the $300 /
+  90-day credit — resources pause when it's exhausted. Budget alerts are a
+  secondary, earlier signal.
+- **Permission caveat:** `google_billing_budget` requires `billing.budgets.editor`
+  on the *billing account* (not the project), which can be restricted. If
+  unavailable, set the budget manually in the console and skip `budget.tf`.
 
 ## Known Constraints & Risks
 
@@ -192,13 +232,44 @@ gcp-demo-pipeline/
   enables service APIs, and sets the budget alerts.
 - **Match deduplication** depends on the `seen_matches` lookup plus the
   idempotent `MERGE`; both layers exist so a re-run never produces duplicates.
+- **Dead-letter topic has no consumer.** Failed messages accrue on the DLQ and are
+  inspected manually (sufficient for a study project). The DLQ subscription's
+  retention bounds growth.
+- **Image build before `ingest`.** Like the state bucket, the extractor container
+  must be built and pushed to Artifact Registry before the `ingest` layer applies.
+
+## Manual / out-of-band steps
+
+These are intentionally *not* Terraform-managed:
+
+1. **Riot API key value** — created empty by Terraform in Secret Manager; the key
+   value is added by hand (and refreshed ~daily for a dev key).
+2. **Dataform Git token** — a PAT stored in Secret Manager so Dataform can pull the
+   `dataform/` SQLX from this repo.
+3. **Extractor image** — built and pushed to Artifact Registry (Cloud Build or
+   local `docker push`) before `ingest` applies.
+4. **Looker Studio report** — built in the console (no Terraform provider exists).
+
+## Testing & Data Quality
+
+- **Dataform assertions** (exam-relevant data-quality coverage): `uniqueKey` on
+  `(match_id, participant_id)` for the fact table, `nonNull` on the keys/partition
+  column, and a row-count / freshness assertion. Assertions fail the workflow run,
+  surfacing bad data early.
+- **Terraform**: `terraform fmt -check`, `validate`, and `plan` per layer — wired
+  into a pre-commit hook (lightweight stand-in for the company's CI/Atlantis).
+- **Extractor**: a `--dry-run` mode that resolves PUUIDs and logs what *would* be
+  published without calling Pub/Sub, plus unit tests for the JSON-shaping logic.
 
 ## Success Criteria
 
-1. `terraform apply` provisions the full pipeline from scratch.
+1. Running the layers in order (`bootstrap → iam → warehouse → build image →
+   ingest → transform`) provisions the full pipeline from scratch.
 2. A scheduled run extracts real Riot match data and lands it in `raw.matches_raw`.
-3. Dataform builds partitioned/clustered marts via incremental MERGE with no dupes.
-4. A Looker Studio dashboard renders metrics from the marts.
+3. Dataform builds partitioned/clustered marts via incremental MERGE with no
+   dupes, and its assertions pass.
+4. A Looker Studio dashboard (with a `game_date` control) renders metrics from the
+   marts.
 5. Total spend stays well within the $300 trial.
 
 ## Future / Optional Modules
