@@ -1,0 +1,129 @@
+<mxfile host="app.diagrams.net" agent="claude-code" version="24.0.0">
+  <diagram name="LoL BigQuery Pipeline" id="lol-pipeline">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- CI/CD lane -->
+        <mxCell id="ghrepo" value="GitHub repo&#10;extractor/ + dbt/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="60" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="gha" value="GitHub Actions CD&#10;build + push 2 images&#10;(Workload Identity Federation — keyless)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="340" y="55" width="270" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Project boundary -->
+        <mxCell id="bd" value="GCP Project — region us-central1  ·  BigQuery location: US" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=8;fontStyle=1;fontSize=13;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="1220" height="1180" as="geometry" />
+        </mxCell>
+
+        <!-- Artifact Registry -->
+        <mxCell id="ar" value="Artifact Registry&#10;2 images: extractor · dbt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="430" y="200" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Secret Manager -->
+        <mxCell id="sm" value="Secret Manager&#10;• Riot API key (only secret)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="360" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Extractor schedule + job -->
+        <mxCell id="sch1" value="Cloud Scheduler&#10;extractor · every 30 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="470" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="run" value="Cloud Run Job — extractor (Python)&#10;(sa-extractor, scales to zero)&#10;&#10;1. resolve PUUID (account-v1)&#10;2. match-v5 recent IDs&#10;3. skip seen → fetch JSON&#10;4. publish 1 msg / match&#10;(token-bucket rate limiting)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="560" width="290" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- dbt schedule + job -->
+        <mxCell id="sch2" value="Cloud Scheduler&#10;dbt · every 30 min (separate clock)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe0cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="470" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="dbt" value="Cloud Run Job — dbt-core&#10;(sa-dbt, scales to zero)&#10;&#10;dbt build = run models + tests&#10;BQ auth via SA (ADC, no keys)&#10;models baked into image" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="920" y="560" width="290" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- Pub/Sub topic -->
+        <mxCell id="ps" value="Pub/Sub topic&#10;lol-matches  (at-least-once)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="790" width="250" height="60" as="geometry" />
+        </mxCell>
+        <!-- Dead-letter topic -->
+        <mxCell id="dlq" value="Dead-letter topic&#10;(no consumer — manual inspect)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="420" y="790" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- BigQuery bronze -->
+        <mxCell id="raw" value="🥉 BRONZE — raw.matches_raw&#10;raw match JSON + publish_time&#10;partitioned by ingest date · 30-day expiry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="90" y="920" width="280" height="80" as="geometry" />
+        </mxCell>
+        <!-- staging silver -->
+        <mxCell id="stg" value="🥈 SILVER — staging.stg_matches&#10;staging.stg_participants (UNNEST x10)&#10;JSON_VALUE / JSON_QUERY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="920" width="280" height="80" as="geometry" />
+        </mxCell>
+        <!-- marts gold -->
+        <mxCell id="marts" value="🥇 GOLD — marts.fct_match_participants&#10;partition: game_date (require-partition-filter)&#10;cluster: champion_id, queue_id&#10;incremental MERGE on (match_id, participant_id)&#10;+ dim_champion, dim_player&#10;+ dbt tests (unique, not_null, relationships, recency)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="880" y="900" width="330" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Looker -->
+        <mxCell id="looker" value="Looker Studio (free)&#10;win rate · KDA · gold/damage · duration · scorecards&#10;(date-range control bound to game_date)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="880" y="1080" width="330" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Note -->
+        <mxCell id="note" value="Two independent clocks: Scheduler→extractor and Scheduler→dbt. End-to-end freshness = max(extractor interval, dbt interval).&#10;CD builds images; Terraform provisions infra. No SA JSON keys anywhere (WIF + ADC).&#10;Medallion: 🥉 Bronze landed by Pub/Sub (no code) → 🥈 Silver + 🥇 Gold built by dbt." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;fontSize=11;fontColor=#666666;dashed=1;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="90" y="1180" width="720" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: CI/CD -->
+        <mxCell id="c1" value="push" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ghrepo" target="gha">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="push images (artifactregistry.writer)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="gha" target="ar">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="pull extractor image" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;dashed=1;" edge="1" parent="1" source="ar" target="run">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" value="pull dbt image" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;dashed=1;" edge="1" parent="1" source="ar" target="dbt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: extractor flow -->
+        <mxCell id="e1" value="triggers (run.jobs.run)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="sch1" target="run">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="Riot key" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="sm" target="run">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="publish (pubsub.publisher)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="run" target="ps">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="on failure" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ps" target="dlq">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="BigQuery subscription (no code, no Dataflow)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ps" target="raw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: dbt transform -->
+        <mxCell id="e6" value="triggers (run.jobs.run)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="sch2" target="dbt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="read raw (publish_time watermark)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="raw" target="stg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="stg" target="marts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="builds silver + gold" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;fontSize=10;" edge="1" parent="1" source="dbt" target="marts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="query (game_date filter required)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="marts" target="looker">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
