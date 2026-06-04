@@ -115,30 +115,50 @@ curves, game-duration trends, per-player scorecards.
 
 ## Repository Layout
 
+The IaC structure is **plain Terraform organized in the spirit of the company's
+`infrastructure-live` (Terragrunt) repo**: reusable `modules/` separated from
+per-environment "live" config, and **each pipeline layer owns its own state file**
+for blast-radius isolation. Terragrunt itself was considered but rejected — with a
+single env/region/project its DRY machinery is overhead, and plain Terraform keeps
+the workflow closest to a vanilla Data Engineer exam toolchain.
+
 ```
 gcp-demo-pipeline/
-├── terraform/
-│   ├── backend.tf          # GCS remote state
-│   ├── providers.tf
-│   ├── variables.tf        # project_id, region, seed players, schedule cron
-│   ├── apis.tf             # enable required service APIs
-│   ├── iam.tf              # service accounts + least-privilege bindings
-│   ├── pubsub.tf           # topic, DLQ, BigQuery subscription
-│   ├── bigquery.tf         # raw / staging / marts datasets + partition/cluster
-│   ├── cloudrun.tf         # extractor job
-│   ├── scheduler.tf        # Cloud Scheduler → triggers the job
-│   ├── secrets.tf          # Secret Manager (Riot key, value set manually)
-│   ├── dataform.tf         # Dataform repo + release/workflow config
-│   ├── budget.tf           # billing budget + alerts ($50/$100/$200)
-│   └── outputs.tf
-├── extractor/              # Python Cloud Run Job source + Dockerfile
+├── modules/                       # reusable building blocks (no state of their own)
+│   ├── service_account/           # SA + scoped role bindings
+│   ├── pubsub_bq/                 # topic + DLQ + BigQuery subscription
+│   ├── bigquery_datasets/         # raw / staging / marts datasets, partition/cluster
+│   ├── cloudrun_extractor/        # Cloud Run Job + Scheduler + Secret Manager
+│   └── dataform/                  # Dataform repo + release/workflow config
+├── envs/
+│   └── dev/                       # the only environment (one GCP project)
+│       ├── common.tfvars          # project_id, region, dataset names, schedule, seed players
+│       ├── bootstrap/             # one-time: GCS state bucket, enable APIs, budget alerts
+│       ├── iam/                   # service accounts → outputs SA emails
+│       ├── warehouse/             # BigQuery datasets (reads iam state)
+│       ├── ingest/                # Pub/Sub + BQ subscription + extractor (reads iam + warehouse)
+│       └── transform/             # Dataform (reads iam + warehouse)
+├── extractor/                     # Python Cloud Run Job source + Dockerfile
 │   ├── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
-├── dataform/               # SQLX models (staging + marts)
+├── dataform/                      # SQLX models (staging + marts)
 │   └── definitions/
-└── docs/superpowers/specs/ # this design doc
+└── docs/superpowers/specs/        # this design doc
 ```
+
+### State & layering
+
+- **One state file per layer**, stored in the GCS backend under a key derived from
+  the layer path (e.g. `dev/ingest/terraform.tfstate`) — mirrors infrastructure-live's
+  `path_relative_to_include()` convention, done explicitly per layer's `backend.tf`.
+- **Cross-layer wiring** uses `terraform_remote_state` data sources: `warehouse`,
+  `ingest`, and `transform` read the `iam` layer's outputs (SA emails); `ingest` and
+  `transform` also read `warehouse` outputs (dataset/table IDs). No hard-coded names.
+- **Apply order** (each is an independent `terraform apply`):
+  `bootstrap → iam → warehouse → ingest → transform`. Looker Studio is wired manually.
+- `common.tfvars` is passed to each layer (`-var-file=../common.tfvars`), the
+  single-file stand-in for infrastructure-live's cascading `common.yaml`.
 
 ## IAM (least privilege)
 
@@ -166,9 +186,10 @@ gcp-demo-pipeline/
   100 req/2min). Stored in Secret Manager and refreshed manually, or replaced
   with a longer-lived "personal" key via Riot's developer portal. The pipeline
   tolerates a stale/invalid key gracefully (logs + DLQ, no crash).
-- **Terraform remote state bucket** must exist before `terraform init`. Handled
-  by a one-time bootstrap step (a `gcloud` command or a small separate Terraform
-  config), to be documented in the implementation plan.
+- **Terraform remote state bucket** must exist before the other layers can
+  `terraform init` against it. Handled by the `envs/dev/bootstrap/` layer, which
+  uses local state for itself (chicken-and-egg) and creates the GCS state bucket,
+  enables service APIs, and sets the budget alerts.
 - **Match deduplication** depends on the `seen_matches` lookup plus the
   idempotent `MERGE`; both layers exist so a re-run never produces duplicates.
 
