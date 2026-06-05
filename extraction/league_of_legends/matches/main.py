@@ -5,12 +5,12 @@ from pathlib import Path
 
 import dotenv
 
-from ingestor.league_of_legends.matches.ingestor import RiotGamesIngestor
-from ingestor.league_of_legends.matches.producer import MatchProducer
+from extraction.league_of_legends.matches.ingestor import RiotGamesIngestor
+from extraction.league_of_legends.matches.producer import MatchProducer
 
-# Load ingestor/.env by absolute path so it works regardless of CWD
+# Load extraction/.env by absolute path so it works regardless of CWD
 # (the module runs from the repo root). main.py -> matches -> league_of_legends
-# -> ingestor, so parents[2] is the ingestor/ project dir.
+# -> extraction, so parents[2] is the extraction/ project dir.
 dotenv.load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ingestor")

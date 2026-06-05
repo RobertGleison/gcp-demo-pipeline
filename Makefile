@@ -1,12 +1,12 @@
 # Riot LoL match extractor.
-# Run from the repo root: the `ingestor.league_of_legends.matches` package
-# imports require the repo root as CWD, while `uv run --project ingestor`
-# resolves dependencies from the ingestor/ project venv.
+# Run from the repo root: the `extraction.league_of_legends.matches` package
+# imports require the repo root as CWD, while `uv run --project extraction`
+# resolves dependencies from the extraction/ project venv.
 #
 # Pass extra flags via ARGS, e.g.  make dryrun ARGS="--count 10"
 
-MODULE := ingestor.league_of_legends.matches.main
-UV     := uv run --project ingestor
+MODULE := extraction.league_of_legends.matches.main
+UV     := uv run --project extraction
 
 .PHONY: run dryrun
 

@@ -1,0 +1,12 @@
+# Keep local virtualenvs, caches, secrets, and IaC state out of build contexts.
+# (Images build from the repo root: `docker build -f extraction/Dockerfile .`)
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.env
+.git
+.gitignore
+**/.terraform
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
