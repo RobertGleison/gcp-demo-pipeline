@@ -9,12 +9,16 @@ gha-creds-*.json
 
 # ---- Terraform ----
 .terraform/
-.terraform.lock.hcl
+# Commit the lock file: pins exact provider versions/hashes for reproducible CI runs.
+!.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
 *.tfvars.json
 !example.tfvars
+# Track the shared, non-secret env config (project_id/region/bucket/repo — no secrets).
+!terraform/environments/**/common.tfvars
+!terraform/environments/**/terraform.tfvars
 crash.log
 crash.*.log
 override.tf
