@@ -1,8 +1,9 @@
 # Root inputs for the prod environment.
-project_id        = "project-5a3b1a75-500c-4b93-9e1"
+# project_id and billing_account live in common.auto.tfvars (git-ignored) so the
+# project/billing identifiers stay out of this public repo. Both files are
+# auto-loaded by Terraform, so no -var-file flag is needed.
 region            = "us-central1"
 github_repository = "RobertGleison/gcp-demo-pipeline"
-billing_account   = "016260-E54BF6-671DF7"
 
 # Warehouse
 bq_location     = "US"
