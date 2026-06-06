@@ -75,6 +75,12 @@ variable "max_delivery_attempts" {
   description = "Deliveries attempted before a message is dead-lettered to the DLQ topic (min 5)."
   type        = number
   default     = 5
+
+  # Pub/Sub rejects a dead_letter_policy with fewer than 5 attempts.
+  validation {
+    condition     = var.max_delivery_attempts >= 5
+    error_message = "max_delivery_attempts must be at least 5 (Pub/Sub's minimum for a dead-letter policy)."
+  }
 }
 
 variable "message_retention_duration" {
