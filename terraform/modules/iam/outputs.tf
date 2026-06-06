@@ -18,6 +18,6 @@ output "scheduler_sa_email" {
 }
 
 output "pubsub_bq_sa_email" {
-  description = "Pub/Sub->BQ subscription SA — granted bigquery.dataEditor on raw in the warehouse layer."
+  description = "Pub/Sub->BQ subscription SA — granted bigquery.dataEditor on bronze in the warehouse layer."
   value       = module.pubsub_bq.email
 }

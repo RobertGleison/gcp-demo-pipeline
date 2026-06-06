@@ -6,13 +6,13 @@ region            = "us-central1"
 github_repository = "RobertGleison/gcp-demo-pipeline"
 
 # Warehouse
-bq_location     = "US"
-raw_dataset     = "raw"
-staging_dataset = "staging"
-marts_dataset   = "marts"
+bq_location    = "US"
+bronze_dataset = "bronze"
+silver_dataset = "silver"
+gold_dataset   = "gold"
 
 # Ingest
 topic_name         = "lol-matches"
-raw_table_id       = "matches_raw"
+bronze_table_id    = "matches_bronze"
 riot_regional_host = "https://americas.api.riotgames.com"
 schedule_cron      = "*/30 * * * *"

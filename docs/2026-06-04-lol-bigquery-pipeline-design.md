@@ -76,28 +76,28 @@ transferable skill. Dataform remains a possible future study module.
               ▼                          │              │ builds      │
        Pub/Sub topic ──▶ Dead-letter    │              │             │
               │  BigQuery subscription   │              ▼             ▼
-              │  (no code)               │   staging.* (silver) ──▶ marts.* (gold)
+              │  (no code)               │   silver.* (silver) ──▶ gold.* (gold)
               ▼                          │        partitioned + clustered, MERGE
-       BigQuery raw.matches_raw ─────────┘              │
-              (bronze: raw JSON)                        ▼
+       BigQuery bronze.matches_bronze ─────────┘              │
+              (bronze: bronze JSON)                        ▼
                                               Looker Studio dashboard (free)
 ```
 
 ### Components
 
-| Layer | Service | Rationale |
-|---|---|---|
-| Trigger | Cloud Scheduler (×2) | Cron-driven bursts, ~free. Two independent triggers: one for the extractor job, one for the dbt job. Each triggers its job via `sa-scheduler` (`run.jobs.run`). |
-| Extract | Cloud Run Job (Python) | Calls Riot API, publishes to Pub/Sub. Scales to zero. |
-| CI/CD | GitHub Actions + Workload Identity Federation | Builds & pushes **both** container images (extractor + dbt) to Artifact Registry on push. Keyless auth — no SA JSON keys. |
-| Image | Artifact Registry | Hosts both container images; CD pushes them before the `ingest`/`transform` applies. |
-| Secrets | Secret Manager | Holds the Riot API key only. (dbt needs no secret — models are baked into the image and it auths to BQ via its SA.) |
-| Ingest | Pub/Sub (topic + DLQ) | Mandatory; decouples extract from load. At-least-once delivery. |
-| Land | Pub/Sub → BigQuery subscription | Writes raw JSON straight to BQ, no code/Dataflow. |
-| Transform | **dbt-core on Cloud Run Job** (ELT in BigQuery) | JSON → typed star schema, incremental MERGE, dbt tests. |
-| Warehouse | BigQuery | Mandatory; partitioned + clustered marts. |
-| Serve | Looker Studio | Free dashboards on the marts. |
-| IaC | Terraform (+ GCS remote state) | Provisions everything, least-privilege IAM, budget alert, WIF. |
+| Layer     | Service                                         | Rationale                                                                                                                                                       |
+| --------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trigger   | Cloud Scheduler (×2)                            | Cron-driven bursts, ~free. Two independent triggers: one for the extractor job, one for the dbt job. Each triggers its job via `sa-scheduler` (`run.jobs.run`). |
+| Extract   | Cloud Run Job (Python)                          | Calls Riot API, publishes to Pub/Sub. Scales to zero.                                                                                                           |
+| CI/CD     | GitHub Actions + Workload Identity Federation   | Builds & pushes **both** container images (extractor + dbt) to Artifact Registry on push. Keyless auth — no SA JSON keys.                                       |
+| Image     | Artifact Registry                               | Hosts both container images; CD pushes them before the `ingest`/`transform` applies.                                                                            |
+| Secrets   | Secret Manager                                  | Holds the Riot API key only. (dbt needs no secret — models are baked into the image and it auths to BQ via its SA.)                                             |
+| Ingest    | Pub/Sub (topic + DLQ)                           | Mandatory; decouples extract from load. At-least-once delivery.                                                                                                 |
+| Land      | Pub/Sub → BigQuery subscription                 | Writes bronze JSON straight to BQ, no code/Dataflow.                                                                                                            |
+| Transform | **dbt-core on Cloud Run Job** (ELT in BigQuery) | JSON → typed star schema, incremental MERGE, dbt tests.                                                                                                         |
+| Warehouse | BigQuery                                        | Mandatory; partitioned + clustered gold.                                                                                                                        |
+| Serve     | Looker Studio                                   | Free dashboards on the gold.                                                                                                                                    |
+| IaC       | Terraform (+ GCS remote state)                  | Provisions everything, least-privilege IAM, budget alert, WIF.                                                                                                  |
 
 ### Deliberately excluded
 
@@ -106,7 +106,7 @@ transferable skill. Dataform remains a possible future study module.
 - **Cloud Composer / Airflow** — ~$300+/mo always-on would consume the whole
   trial. Cloud Scheduler covers orchestration cheaply.
 - **Dataform** — viable and GCP-native, but dbt-core was chosen for portability
-  and industry relevance (see *Why dbt-core*). Possible future module.
+  and industry relevance (see _Why dbt-core_). Possible future module.
 
 ## Data Flow
 
@@ -118,18 +118,18 @@ transferable skill. Dataform remains a possible future study module.
    Riot ID → PUUID via `account-v1` (by-riot-id) first.
 2. For each PUUID: call `match-v5` for recent match IDs (last N, e.g. 10).
 3. Skip match IDs already seen (lookup against a small `seen_matches` table or
-   the marts) to limit API calls and duplicates.
+   the gold) to limit API calls and duplicates.
 4. For each new match: fetch full match JSON, publish one Pub/Sub message with
-   the raw JSON body + attributes (`match_id`, `platform`, `queue_id`).
+   the bronze JSON body + attributes (`match_id`, `platform`, `queue_id`).
 5. Respect Riot rate limits (token-bucket / sleep). On Riot 4xx/5xx: log and
    continue — never crash the whole run.
 
-### Landing — `raw.matches_raw` (bronze)
+### Landing — `bronze.matches_bronze` (bronze)
 
 Written by the Pub/Sub BigQuery subscription using the standard schema:
 `subscription_name`, `message_id`, `publish_time`, `attributes` (JSON),
 `data` (JSON string = full match). Partitioned by ingest date; 30-day
-expiration (raw is disposable — it's the replayable source of truth).
+expiration (bronze is disposable — it's the replayable source of truth).
 
 ### Transform — dbt medallion model
 
@@ -138,19 +138,19 @@ run tests, in DAG order). Models live in `dbt/` and are baked into the image.
 dbt authenticates to BigQuery with the Cloud Run Job's service account
 (`profiles.yml` uses `method: oauth` / ADC — no key files).
 
-- **staging.stg_matches** (silver) — parse `data` with `JSON_VALUE` /
+- **silver.stg_matches** (silver) — parse `data` with `JSON_VALUE` /
   `JSON_QUERY`: one row per match (`match_id`, `game_start`, `game_duration`,
   `queue_id`, `patch`, `winning_team`).
-- **staging.stg_participants** (silver) — `UNNEST` the 10 participants: one row
+- **silver.stg_participants** (silver) — `UNNEST` the 10 participants: one row
   per (match, player) with champion, role, K/D/A, gold, damage, win flag, etc.
-- **marts.dim_champion**, **marts.dim_player** (gold) — small dimension tables.
-- **marts.fct_match_participants** (gold) — fact table,
+- **gold.dim_champion**, **gold.dim_player** (gold) — small dimension tables.
+- **gold.fct_match_participants** (gold) — fact table,
   `materialized='incremental'`, `incremental_strategy='merge'`,
   `unique_key=['match_id','participant_id']`, **partitioned by `game_date`**
   (`require_partition_filter=true`), **clustered by `champion_id, queue_id`**. The
-  incremental block selects new rows from `raw` using a **`publish_time`
+  incremental block selects new rows from `bronze` using a **`publish_time`
   watermark** (`{% if is_incremental() %} where publish_time > (select
-  max(publish_time) from {{ this }}) {% endif %}`) → idempotent, re-run safe, no
+max(publish_time) from {{ this }}) {% endif %}`) → idempotent, re-run safe, no
   dupes.
 
 **How the dbt SQL gets deployed:** the `dbt/` directory in the GitHub repo is the
@@ -162,12 +162,12 @@ source of truth. On push, **GitHub Actions builds a container image** (dbt-core 
 **How the transform is triggered:** a dedicated Cloud Scheduler job runs the dbt
 Cloud Run Job on its own cron (default every 30 min), independent of the
 extractor. End-to-end freshness is therefore the max of the extractor and dbt
-intervals. (The optional Cloud Workflows module in *Future* would chain them into
+intervals. (The optional Cloud Workflows module in _Future_ would chain them into
 one DAG.)
 
 ### Serving — Looker Studio
 
-Dashboards on the marts: win rate by champion, KDA distributions, gold/damage
+Dashboards on the gold: win rate by champion, KDA distributions, gold/damage
 curves, game-duration trends, per-player scorecards.
 
 **Gotcha:** because `fct_match_participants` has **require-partition-filter**
@@ -192,7 +192,7 @@ gcp-demo-pipeline/
 ├── modules/                       # reusable building blocks (no state of their own)
 │   ├── service_account/           # SA + scoped role bindings
 │   ├── pubsub_bq/                 # topic + DLQ + BigQuery subscription
-│   ├── bigquery_datasets/         # raw / staging / marts datasets, partition/cluster
+│   ├── bigquery_datasets/         # bronze / silver / gold datasets, partition/cluster
 │   ├── cloudrun_job/              # generic Cloud Run Job + Scheduler trigger (used by extractor & dbt)
 │   └── wif_github/                # Workload Identity pool/provider + deployer SA for GitHub Actions
 ├── envs/
@@ -211,8 +211,8 @@ gcp-demo-pipeline/
 │   ├── dbt_project.yml
 │   ├── profiles.yml               # BigQuery, method: oauth (ADC), no keyfile
 │   ├── models/
-│   │   ├── staging/               # stg_matches, stg_participants (silver)
-│   │   └── marts/                 # fct_match_participants, dim_* (gold)
+│   │   ├── silver/               # stg_matches, stg_participants (silver)
+│   │   └── gold/                 # fct_match_participants, dim_* (gold)
 │   └── Dockerfile                 # dbt-core + dbt-bigquery + project
 └── docs/                          # this design doc
 ```
@@ -227,7 +227,7 @@ gcp-demo-pipeline/
   `transform` also read `warehouse` outputs (dataset/table IDs). No hard-coded names.
 - **Apply order** (each is an independent `terraform apply`):
   `bootstrap → iam → warehouse →` **CD builds & pushes both images** `→ ingest →
-  transform`. Both images must exist in Artifact Registry before the layers that
+transform`. Both images must exist in Artifact Registry before the layers that
   reference them apply (`ingest` → extractor image, `transform` → dbt image). WIF
   is created in `bootstrap`, so GitHub Actions can authenticate and push as soon as
   bootstrap is applied.
@@ -260,7 +260,7 @@ gcp-demo-pipeline/
 - `sa-scheduler` (Cloud Scheduler identity that **triggers** both jobs):
   `run.jobs.run` on each job (extractor + dbt). Cloud Run **Jobs** need
   `run.jobs.run` — `run.invoker` (Services only) is not sufficient.
-- `sa-pubsub-bq`: `bigquery.dataEditor` on the `raw` dataset only (used by the
+- `sa-pubsub-bq`: `bigquery.dataEditor` on the `bronze` dataset only (used by the
   BQ subscription). Pub/Sub's own service agent also needs this granted, plus
   `pubsub.publisher` on the dead-letter topic for dead-lettering to work.
 - `sa-gh-deployer` (GitHub Actions via WIF): `artifactregistry.writer` only.
@@ -269,7 +269,7 @@ gcp-demo-pipeline/
 ## Cost Controls
 
 - **Budget alerts** at $50 / $100 / $200 (email). Alerts only — do not auto-stop.
-- BigQuery **on-demand** pricing; marts **require partition filter**; `raw`
+- BigQuery **on-demand** pricing; gold **require partition filter**; `bronze`
   table **30-day expiration**.
 - Cloud Run **scales to zero** between bursts (both jobs); Scheduler + Pub/Sub
   costs are negligible. GitHub Actions minutes are free for this volume.
@@ -279,7 +279,7 @@ gcp-demo-pipeline/
   90-day credit — resources pause when it's exhausted. Budget alerts are a
   secondary, earlier signal.
 - **Permission caveat:** `google_billing_budget` requires `billing.budgets.editor`
-  on the *billing account* (not the project), which can be restricted. If
+  on the _billing account_ (not the project), which can be restricted. If
   unavailable, set the budget manually in the console and skip `budget.tf`.
 
 ## Known Constraints & Risks
@@ -307,7 +307,7 @@ gcp-demo-pipeline/
 
 ## Manual / out-of-band steps
 
-These are intentionally *not* Terraform-managed:
+These are intentionally _not_ Terraform-managed:
 
 1. **Riot API key value** — created empty by Terraform in Secret Manager; the key
    value is added by hand (and refreshed ~daily for a dev key).
@@ -330,7 +330,7 @@ These are intentionally *not* Terraform-managed:
   lineage (nice-to-have).
 - **Terraform**: `terraform fmt -check`, `validate`, and `plan` per layer — wired
   into a pre-commit hook (lightweight stand-in for the company's CI/Atlantis).
-- **Extractor**: a `--dry-run` mode that resolves PUUIDs and logs what *would* be
+- **Extractor**: a `--dry-run` mode that resolves PUUIDs and logs what _would_ be
   published without calling Pub/Sub, plus unit tests for the JSON-shaping logic.
 - **CD**: image build is itself a check — a broken Dockerfile or failing
   `dbt parse`/`dbt compile` step fails the workflow before a bad image ships.
@@ -338,14 +338,14 @@ These are intentionally *not* Terraform-managed:
 ## Success Criteria
 
 1. Running the layers in order (`bootstrap → iam → warehouse → CD builds images →
-   ingest → transform`) provisions the full pipeline from scratch.
+ingest → transform`) provisions the full pipeline from scratch.
 2. A push to `extractor/**` or `dbt/**` builds and pushes a new image to Artifact
    Registry via GitHub Actions (keyless WIF), with no JSON keys anywhere.
-3. A scheduled run extracts real Riot match data and lands it in `raw.matches_raw`.
-4. dbt builds partitioned/clustered marts via incremental MERGE with no dupes, and
+3. A scheduled run extracts real Riot match data and lands it in `bronze.matches_bronze`.
+4. dbt builds partitioned/clustered gold via incremental MERGE with no dupes, and
    its tests pass.
 5. A Looker Studio dashboard (with a `game_date` control) renders metrics from the
-   marts.
+   gold.
 6. Total spend stays well within the $300 trial.
 
 ## Future / Optional Modules

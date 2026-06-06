@@ -4,7 +4,7 @@
 #   - sa-extractor : pubsub.publisher (topic) + secretAccessor (Riot key)  -> ingest
 #   - sa-dbt       : bigquery.dataEditor (datasets)                        -> warehouse
 #   - sa-scheduler : run.jobs.run (each job)                               -> ingest / transform
-#   - sa-pubsub-bq : bigquery.dataEditor (raw dataset)                     -> warehouse
+#   - sa-pubsub-bq : bigquery.dataEditor (bronze dataset)                     -> warehouse
 # Only genuinely project-wide roles (e.g. bigquery.jobUser) are granted here.
 #
 # The CD deployer SA (sa-gh-deployer) is NOT here — it lives in the cicd layer.
