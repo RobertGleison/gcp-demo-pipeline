@@ -6,6 +6,12 @@ variable "project_id" {
 variable "account_id" {
   description = "Service account ID — the local part before the @ (e.g. \"sa-extractor\")."
   type        = string
+
+  # GCP rule: 6-30 chars, start with a lowercase letter, end alphanumeric.
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.account_id))
+    error_message = "account_id must be 6-30 chars: start with a lowercase letter, contain only lowercase letters/digits/hyphens, and end alphanumeric."
+  }
 }
 
 variable "display_name" {

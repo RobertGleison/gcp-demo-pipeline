@@ -4,7 +4,7 @@ output "topic_id" {
 }
 
 output "subscription_name" {
-  description = "BigQuery subscription landing matches into raw.matches_raw."
+  description = "BigQuery subscription landing matches into bronze.matches_bronze."
   value       = module.pubsub.subscription_name
 }
 
@@ -13,9 +13,9 @@ output "dlq_subscription_name" {
   value       = module.pubsub.dlq_subscription_name
 }
 
-output "matches_raw_table" {
+output "matches_bronze_table" {
   description = "Fully-qualified landing table ID."
-  value       = "${var.project_id}.${var.raw_dataset_id}.${google_bigquery_table.matches_raw.table_id}"
+  value       = "${var.project_id}.${var.bronze_dataset_id}.${google_bigquery_table.matches_bronze.table_id}"
 }
 
 output "extractor_job_name" {

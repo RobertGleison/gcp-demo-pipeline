@@ -19,10 +19,10 @@ locals {
 
   # Pub/Sub's per-project service agent. It (not the runtime SAs) does the
   # dead-lettering and, on the custom-SA path, impersonates writer_sa_email.
-  pubsub_agent = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  pubsub_agent = "serviceAccount:service-${data.google_project.main.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
-data "google_project" "this" {
+data "google_project" "main" {
   project_id = var.project_id
 }
 

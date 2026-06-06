@@ -51,22 +51,22 @@ variable "bq_location" {
   type        = string
 }
 
-variable "raw_dataset" {
+variable "bronze_dataset" {
   description = "Dataset ID for the bronze landing zone."
   type        = string
-  default     = "raw"
+  default     = "bronze"
 }
 
-variable "staging_dataset" {
-  description = "Dataset ID for silver dbt staging models."
+variable "silver_dataset" {
+  description = "Dataset ID for silver dbt silver models."
   type        = string
-  default     = "staging"
+  default     = "silver"
 }
 
-variable "marts_dataset" {
-  description = "Dataset ID for gold dbt marts."
+variable "gold_dataset" {
+  description = "Dataset ID for gold dbt gold."
   type        = string
-  default     = "marts"
+  default     = "gold"
 }
 
 # --- Ingest -------------------------------------------------------------------
@@ -76,14 +76,14 @@ variable "topic_name" {
   default     = "lol-matches"
 }
 
-variable "raw_table_id" {
-  description = "Landing table in the raw dataset the BigQuery subscription writes to."
+variable "bronze_table_id" {
+  description = "Landing table in the bronze dataset the BigQuery subscription writes to."
   type        = string
-  default     = "matches_raw"
+  default     = "matches_bronze"
 }
 
-variable "raw_partition_expiration_days" {
-  description = "Days a daily partition of matches_raw is kept before BigQuery drops it."
+variable "bronze_partition_expiration_days" {
+  description = "Days a daily partition of matches_bronze is kept before BigQuery drops it."
   type        = number
   default     = 30
 }

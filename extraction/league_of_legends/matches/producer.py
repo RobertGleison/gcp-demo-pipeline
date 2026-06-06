@@ -5,7 +5,7 @@ log = logging.getLogger(__name__)
 
 
 class MatchProducer:
-    """Publishes one Pub/Sub message per match: body = raw match JSON,
+    """Publishes one Pub/Sub message per match: body = bronze match JSON,
     attributes = match_id / platform / queue_id (per the design doc's Landing
     section). In dry-run mode it logs what it *would* publish and never touches
     Pub/Sub, so the extractor can be exercised with no topic and no GCP.

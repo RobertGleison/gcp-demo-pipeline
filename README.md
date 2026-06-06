@@ -3,7 +3,6 @@
 A Terraform-provisioned data pipeline on Google Cloud that extracts League
 of Legends match data from the Riot Games API. This is a MVP working demo and not a full solution with data governance, scalability and any other buzz words.
 
-
 ## Architecture
 
 ```mermaid
@@ -33,9 +32,9 @@ flowchart TB
         end
 
         subgraph warehouse["BigQuery (medallion)"]
-            RAW["bronze.matches_raw"]
+            bronze["bronze.matches_bronze"]
             STG["silver.tables"]
-            MARTS["gold.tables"]
+            gold["gold.tables"]
         end
 
         LOOKER["Looker Studio"]
@@ -50,10 +49,10 @@ flowchart TB
     JOB -- "publish message" --> TOPIC
     TOPIC -- "on repeated failure" --> DLQ
     TOPIC --> BQSUB
-    BQSUB -- "write rows" --> RAW
-    RAW -. "dbt build" .-> STG
-    STG -. "dbt build (MERGE)" .-> MARTS
-    MARTS -. "query" .-> LOOKER
+    BQSUB -- "write rows" --> bronze
+    bronze -. "dbt build" .-> STG
+    STG -. "dbt build (MERGE)" .-> gold
+    gold -. "query" .-> LOOKER
 
     style github fill:#24292f,stroke:#8b949e,stroke-width:2px,color:#f0f4f8
     style gcp fill:#3d444d,stroke:#8b949e,stroke-width:2px,color:#f0f4f8
@@ -70,7 +69,7 @@ job is fully scaled to zero — you pay only for the seconds it executes.
 
 **2. Extract.** The **extractor Cloud Run Job** (Python, image pulled from
 Artifact Registry) runs as `sa-extractor`. It reads the Riot API key from
-**Secret Manager** at runtime via `secret_env` — the key is *never* baked into
+**Secret Manager** at runtime via `secret_env` — the key is _never_ baked into
 the image or the job spec. It then calls the Riot API (see
 [The extractor](#the-extractor) below).
 
@@ -81,14 +80,14 @@ bursty extractor from the warehouse and gives at-least-once delivery; messages
 that repeatedly fail land on a **dead-letter topic** for manual inspection.
 
 **4. Land (no code).** A **Pub/Sub → BigQuery subscription** writes messages
-straight into `raw.matches_raw` — no Dataflow, no consumer code. The `raw` table
+straight into `bronze.matches_bronze` — no Dataflow, no consumer code. The `bronze` table
 is partitioned by ingest date and its partitions **auto-expire after 30 days**:
-raw is a disposable, replayable bronze layer, not the source of truth.
+bronze is a disposable, replayable bronze layer, not the source of truth.
 
 **5. Transform & serve (planned).** A second Cloud Run Job running **dbt-core**
-would parse the raw JSON into a typed star schema (`staging.*` silver →
-`marts.*` gold) via incremental `MERGE`, and **Looker Studio** would chart the
-marts. The `staging`/`marts` datasets already exist (created by the `warehouse`
+would parse the bronze JSON into a typed star schema (`silver.*` silver →
+`gold.*` gold) via incremental `MERGE`, and **Looker Studio** would chart the
+gold. The `silver`/`gold` datasets already exist (created by the `warehouse`
 module) but nothing populates them yet.
 
 **Region alignment.** Cloud Run, Scheduler, Pub/Sub, and Artifact Registry all
@@ -134,18 +133,18 @@ Every module is provider-only and stateless; the `environments/prod` root owns
 the single state file and composes them. All depend on the project APIs enabled
 once in `apis.tf`.
 
-| Module | What it provisions |
-|---|---|
-| **`budget`** | A monthly `google_billing_budget` cost-alert on the project. Alerts only (it never stops spend) at configurable thresholds (default 25% / 50% / 100% of the budget amount). |
-| **`cicd`** | An **Artifact Registry** Docker repo (`pipeline-images`) for the container images, plus the deployer's `artifactregistry.writer` grant. Wraps `wif_github`. |
-| **`wif_github`** | **Workload Identity Federation** for keyless GitHub Actions auth: an OIDC pool + provider (scoped to this exact repo via an attribute condition) and a `sa-gh-deployer` service account GitHub can impersonate. **No JSON keys.** |
-| **`iam`** | Creates the four runtime **service accounts** via `service_account`: `sa-extractor`, `sa-dbt`, `sa-scheduler`, `sa-pubsub-bq`. Only genuinely project-wide roles are granted here; resource-scoped bindings live with the resources. |
-| **`service_account`** | Generic helper: one `google_service_account` + optional project-level role bindings. |
-| **`warehouse`** | The three **BigQuery datasets** — `raw` (bronze, 30-day table expiry), `staging` (silver), `marts` (gold) — via `bigquery_datasets`, plus dataset-scoped IAM (Pub/Sub-BQ SA → editor on `raw`; dbt SA → viewer on `raw`, editor on `staging`/`marts`). |
-| **`bigquery_datasets`** | Generic helper: a single `google_bigquery_dataset` with optional default table expiration. Tables (and their partitioning/clustering) are created by the *writers*, not here. |
-| **`ingest`** | The heart of the pipeline. Creates the `matches_raw` landing table, the Riot-key **Secret Manager** secret (empty, scoped to `sa-extractor`), the Pub/Sub topic + DLQ + BQ subscription (via `pubsub_bq`), and the **extractor Cloud Run Job + Scheduler** (via `cloudrun_job`). Grants `sa-extractor` `pubsub.publisher` on the topic. |
-| **`pubsub_bq`** | Generic Pub/Sub landing: a topic, a **BigQuery subscription** that writes straight to a table, a dead-letter topic + subscription, and the Pub/Sub service-agent IAM needed for BQ writes and dead-lettering. |
-| **`cloudrun_job`** | Generic **Cloud Run v2 Job** + optional **Cloud Scheduler** trigger. Supports plain env vars, Secret Manager-backed env vars, command/args overrides, and CPU/memory/retry/timeout knobs. Reused by the extractor (and, when built, dbt). |
+| Module                  | What it provisions                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`budget`**            | A monthly `google_billing_budget` cost-alert on the project. Alerts only (it never stops spend) at configurable thresholds (default 25% / 50% / 100% of the budget amount).                                                                                                                                                                |
+| **`cicd`**              | An **Artifact Registry** Docker repo (`pipeline-images`) for the container images, plus the deployer's `artifactregistry.writer` grant. Wraps `wif_github`.                                                                                                                                                                                |
+| **`wif_github`**        | **Workload Identity Federation** for keyless GitHub Actions auth: an OIDC pool + provider (scoped to this exact repo via an attribute condition) and a `sa-gh-deployer` service account GitHub can impersonate. **No JSON keys.**                                                                                                          |
+| **`iam`**               | Creates the four runtime **service accounts** via `service_account`: `sa-extractor`, `sa-dbt`, `sa-scheduler`, `sa-pubsub-bq`. Only genuinely project-wide roles are granted here; resource-scoped bindings live with the resources.                                                                                                       |
+| **`service_account`**   | Generic helper: one `google_service_account` + optional project-level role bindings.                                                                                                                                                                                                                                                       |
+| **`warehouse`**         | The three **BigQuery datasets** — `bronze` (bronze, 30-day table expiry), `silver` (silver), `gold` (gold) — via `bigquery_datasets`, plus dataset-scoped IAM (Pub/Sub-BQ SA → editor on `bronze`; dbt SA → viewer on `bronze`, editor on `silver`/`gold`).                                                                                |
+| **`bigquery_datasets`** | Generic helper: a single `google_bigquery_dataset` with optional default table expiration. Tables (and their partitioning/clustering) are created by the _writers_, not here.                                                                                                                                                              |
+| **`ingest`**            | The heart of the pipeline. Creates the `matches_bronze` landing table, the Riot-key **Secret Manager** secret (empty, scoped to `sa-extractor`), the Pub/Sub topic + DLQ + BQ subscription (via `pubsub_bq`), and the **extractor Cloud Run Job + Scheduler** (via `cloudrun_job`). Grants `sa-extractor` `pubsub.publisher` on the topic. |
+| **`pubsub_bq`**         | Generic Pub/Sub landing: a topic, a **BigQuery subscription** that writes straight to a table, a dead-letter topic + subscription, and the Pub/Sub service-agent IAM needed for BQ writes and dead-lettering.                                                                                                                              |
+| **`cloudrun_job`**      | Generic **Cloud Run v2 Job** + optional **Cloud Scheduler** trigger. Supports plain env vars, Secret Manager-backed env vars, command/args overrides, and CPU/memory/retry/timeout knobs. Reused by the extractor (and, when built, dbt).                                                                                                  |
 
 ### Module wiring
 
@@ -157,12 +156,101 @@ flowchart LR
     CICD -- artifact_registry_repo --> INGEST[ingest]
     IAM -- extractor_sa / scheduler_sa --> INGEST
     IAM -- dbt_sa / pubsub_bq_sa --> WH[warehouse]
-    WH -- raw_dataset_id --> INGEST
+    WH -- bronze_dataset_id --> INGEST
     INGEST --> PUBSUB[pubsub_bq]
     INGEST --> CRJ[cloudrun_job]
     WH --> BQDS[bigquery_datasets ×3]
     BUDGET[budget]
 ```
+
+---
+
+## Identity & access (IAM)
+
+GCP IAM is always one sentence: a **member** (the _who_) gets a **role** (the
+_what_ — a bundle of permissions) on a **resource** (the _where_). The three
+member types are distinct:
+
+- **Users** — a human (`you@example.com`); logs in with a password + 2FA.
+- **Groups** — a collection of users; grant a role once, every member inherits.
+- **Service accounts (SA)** — a non-human identity for _code_
+  (`sa-extractor@<project>.iam.gserviceaccount.com`). This is what the pipeline
+  runs as; there are no humans in the data path.
+
+Two things that routinely trip people up:
+
+1. **Permissions belong to identities, not to resources.** `sa-dbt` having edit
+   rights on BigQuery says nothing about what _you_ can do — they're separate
+   identities with separate, non-overlapping grants.
+2. **A new member starts with zero permissions.** A freshly-added human can't
+   touch BigQuery (or anything) until an admin _explicitly_ binds a role to
+   their email. They also can't borrow an SA's powers unless granted
+   `iam.serviceAccountUser` / `serviceAccountTokenCreator` on that SA. The only
+   way "anyone" gets broad access is the anti-pattern of handing out the basic
+   `roles/owner` / `roles/editor` — which this project never does.
+
+### Least privilege by design
+
+The `iam` module only **mints the four runtime SAs** and grants the single
+genuinely project-wide role (`bigquery.jobUser` on `sa-dbt`). Every
+**resource-scoped** grant lives in the module that owns the resource — a role on
+one topic, secret, job, or dataset, never project-wide:
+
+| Service account  | Runs as the identity for  | Roles granted                                                                       | Scoped to                              | Granted in            |
+| ---------------- | ------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------- | --------------------- |
+| **sa-extractor** | Extractor Cloud Run Job   | `secretmanager.secretAccessor`<br/>`pubsub.publisher`                               | `riot-api-key` secret<br/>`lol-matches` topic | `ingest`        |
+| **sa-scheduler** | Cloud Scheduler trigger   | `run.invoker` (incl. `run.jobs.run`)                                                | the extractor job (`:run`)             | `cloudrun_job`        |
+| **sa-pubsub-bq** | Pub/Sub → BQ subscription | `bigquery.dataEditor`                                                               | `bronze` dataset                       | `warehouse`           |
+| **sa-dbt**       | dbt Cloud Run Job _(planned)_ | `bigquery.jobUser` _(project-wide)_<br/>`bigquery.dataViewer`<br/>`bigquery.dataEditor` | project<br/>`bronze`<br/>`silver` + `gold` | `iam` + `warehouse` |
+
+> The CD deployer (`sa-gh-deployer`) is **not** a runtime SA — it lives in the
+> `cicd` / `wif_github` layer and is impersonated keylessly by GitHub Actions
+> (WIF) to push images, with only `artifactregistry.writer`.
+
+### Who can act on what
+
+```mermaid
+flowchart LR
+    SCH["Cloud Scheduler"]:::comp
+    EXT["Extractor<br/>Cloud Run Job"]:::comp
+    PSBQ["Pub/Sub → BQ<br/>subscription"]:::comp
+    DBT["dbt Cloud Run Job<br/>(planned)"]:::comp
+
+    SAsch(["sa-scheduler"]):::sa
+    SAext(["sa-extractor"]):::sa
+    SApsbq(["sa-pubsub-bq"]):::sa
+    SAdbt(["sa-dbt"]):::sa
+
+    SECRET["Secret Manager<br/>riot-api-key"]:::res
+    JOBRUN["Extractor job<br/>:run endpoint"]:::res
+    TOPIC["Pub/Sub topic<br/>lol-matches"]:::res
+    PROJ["project<br/>(run BQ query jobs)"]:::res
+    BRONZE["bronze"]:::res
+    SILVER["silver"]:::res
+    GOLD["gold"]:::res
+
+    SCH -. runs as .-> SAsch
+    EXT -. runs as .-> SAext
+    PSBQ -. runs as .-> SApsbq
+    DBT -. runs as .-> SAdbt
+
+    SAsch -- "run.invoker" --> JOBRUN
+    SAext -- "secretAccessor" --> SECRET
+    SAext -- "pubsub.publisher" --> TOPIC
+    SApsbq -- "dataEditor" --> BRONZE
+    SAdbt -- "jobUser" --> PROJ
+    SAdbt -- "dataViewer" --> BRONZE
+    SAdbt -- "dataEditor" --> SILVER
+    SAdbt -- "dataEditor" --> GOLD
+
+    classDef sa fill:#1f6feb,stroke:#8b949e,stroke-width:2px,color:#f0f4f8;
+    classDef comp fill:#3d444d,stroke:#8b949e,stroke-width:2px,color:#f0f4f8;
+    classDef res fill:#57606a,stroke:#8b949e,stroke-width:2px,color:#f0f4f8;
+```
+
+Each pipeline component **runs as** exactly one SA (dashed), and each SA holds
+only the narrow grants (solid, labelled with the role) it needs for its single
+job — nothing more.
 
 ---
 
@@ -198,24 +286,25 @@ sequenceDiagram
 
 **Endpoints used** (`ingestor.py`):
 
-| Step | Endpoint | Purpose |
-|---|---|---|
-| Resolve | `account-v1` `/accounts/by-riot-id/{gameName}/{tagLine}` | Riot ID → **PUUID** (summoner-name lookup is deprecated). |
-| Discover | `match-v5` `/matches/by-puuid/{puuid}/ids` | PUUID → list of recent **match IDs** (`start`, `count`, optional `queue`). |
-| Fetch | `match-v5` `/matches/{matchId}` | Full **match JSON** (`metadata` + `info`: 10 participants with champion, role, K/D/A, gold, damage, win, plus queue/duration/platform). |
-| *(unused)* | `match-v5` `/matches/{matchId}/timeline` | Per-minute event timeline — method exists (`get_match_timeline`) but isn't called in the main loop. |
+| Step       | Endpoint                                                 | Purpose                                                                                                                                 |
+| ---------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Resolve    | `account-v1` `/accounts/by-riot-id/{gameName}/{tagLine}` | Riot ID → **PUUID** (summoner-name lookup is deprecated).                                                                               |
+| Discover   | `match-v5` `/matches/by-puuid/{puuid}/ids`               | PUUID → list of recent **match IDs** (`start`, `count`, optional `queue`).                                                              |
+| Fetch      | `match-v5` `/matches/{matchId}`                          | Full **match JSON** (`metadata` + `info`: 10 participants with champion, role, K/D/A, gold, damage, win, plus queue/duration/platform). |
+| _(unused)_ | `match-v5` `/matches/{matchId}/timeline`                 | Per-minute event timeline — method exists (`get_match_timeline`) but isn't called in the main loop.                                     |
 
 All three use the **regional routing host** (`americas` / `europe` / `asia` /
-`sea`), set via `RIOT_REGIONAL_HOST` — *not* the platform host (`na1`/`euw1`).
+`sea`), set via `RIOT_REGIONAL_HOST` — _not_ the platform host (`na1`/`euw1`).
 
 ### What it does with the data
 
 `producer.py` publishes **one Pub/Sub message per match**:
+
 - **body** = the full match JSON (UTF-8),
 - **attributes** = `match_id`, `platform` (`info.platformId`), `queue_id`
   (`info.queueId`).
 
-In `--dry-run` it logs what it *would* publish and never touches Pub/Sub (and
+In `--dry-run` it logs what it _would_ publish and never touches Pub/Sub (and
 lazily skips importing the Pub/Sub client), so you can exercise it with no GCP.
 
 ### Resilience
@@ -228,16 +317,16 @@ lazily skips importing the Pub/Sub client), so you can exercise it with no GCP.
 
 ### Configuration
 
-| Env var | Required | Meaning |
-|---|---|---|
-| `RIOT_API_KEY` | yes | Riot API token. In GCP, injected from Secret Manager. |
-| `RIOT_REGIONAL_HOST` | yes | e.g. `https://americas.api.riotgames.com`. |
-| `PUBSUB_TOPIC` | yes (unless `--dry-run`) | Full path `projects/<p>/topics/<t>`. |
+| Env var              | Required                 | Meaning                                               |
+| -------------------- | ------------------------ | ----------------------------------------------------- |
+| `RIOT_API_KEY`       | yes                      | Riot API token. In GCP, injected from Secret Manager. |
+| `RIOT_REGIONAL_HOST` | yes                      | e.g. `https://americas.api.riotgames.com`.            |
+| `PUBSUB_TOPIC`       | yes (unless `--dry-run`) | Full path `projects/<p>/topics/<t>`.                  |
 
-| CLI flag | Default | Meaning |
-|---|---|---|
-| `--count N` | `5` | Matches to fetch per player (Terraform sets `--count 10`). |
-| `--dry-run` | off | Resolve + log, never publish. |
+| CLI flag    | Default | Meaning                                                    |
+| ----------- | ------- | ---------------------------------------------------------- |
+| `--count N` | `5`     | Matches to fetch per player (Terraform sets `--count 10`). |
+| `--dry-run` | off     | Resolve + log, never publish.                              |
 
 > **Note:** The seed list is currently the **placeholder** `["YourName#NA1"]` in
 > `main.py`. Replace it with a real Riot ID (your own account is the safest test)
@@ -301,12 +390,12 @@ These are intentionally **not** Terraform-managed:
 ## Operating notes
 
 - **Cost:** everything scales to zero; Scheduler + Pub/Sub are negligible;
-  BigQuery is on-demand with a disposable, self-expiring `raw` table. Realistic
+  BigQuery is on-demand with a disposable, self-expiring `bronze` table. Realistic
   burn is a few dollars. The budget module emails alerts; the free-trial credit
   is the real hard stop.
 - **Duplicates:** Pub/Sub is at-least-once, so a match may land more than once in
-  `raw`. The planned dbt incremental `MERGE` on `(match_id, participant_id)` is
-  what will make the marts idempotent.
+  `bronze`. The planned dbt incremental `MERGE` on `(match_id, participant_id)` is
+  what will make the gold idempotent.
 - **Dead-letter topic** has no consumer — failed messages accumulate for manual
   inspection.
 
@@ -317,7 +406,7 @@ These are intentionally **not** Terraform-managed:
 Designed in the spec, **not yet implemented**:
 
 - **dbt transform layer** — a second `cloudrun_job` (dbt-core container) to
-  build `staging.*` (silver) and `marts.*` (gold) with incremental `MERGE`,
+  build `silver.*` (silver) and `gold.*` (gold) with incremental `MERGE`,
   partitioning/clustering, and dbt tests. The datasets already exist.
 - **GitHub Actions CI/CD** — keyless (WIF) image build + push on every push to
   `extraction/**`, replacing the manual `docker buildx` step. The WIF pool,
@@ -325,4 +414,4 @@ Designed in the spec, **not yet implemented**:
 - **Looker Studio dashboards** — win rate by champion, KDA distributions,
   per-player scorecards (no Terraform provider exists; built in the console).
 - **Match dedup** — a `seen_matches` lookup to skip already-fetched matches.
-</content>
+  </content>

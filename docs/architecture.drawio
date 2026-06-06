@@ -54,15 +54,15 @@
         </mxCell>
 
         <!-- BigQuery bronze -->
-        <mxCell id="raw" value="🥉 BRONZE — raw.matches_raw&#10;raw match JSON + publish_time&#10;partitioned by ingest date · 30-day expiry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+        <mxCell id="bronze" value="🥉 BRONZE — bronze.matches_bronze&#10;bronze match JSON + publish_time&#10;partitioned by ingest date · 30-day expiry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
           <mxGeometry x="90" y="920" width="280" height="80" as="geometry" />
         </mxCell>
-        <!-- staging silver -->
-        <mxCell id="stg" value="🥈 SILVER — staging.stg_matches&#10;staging.stg_participants (UNNEST x10)&#10;JSON_VALUE / JSON_QUERY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+        <!-- silver silver -->
+        <mxCell id="stg" value="🥈 SILVER — silver.stg_matches&#10;silver.stg_participants (UNNEST x10)&#10;JSON_VALUE / JSON_QUERY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
           <mxGeometry x="500" y="920" width="280" height="80" as="geometry" />
         </mxCell>
-        <!-- marts gold -->
-        <mxCell id="marts" value="🥇 GOLD — marts.fct_match_participants&#10;partition: game_date (require-partition-filter)&#10;cluster: champion_id, queue_id&#10;incremental MERGE on (match_id, participant_id)&#10;+ dim_champion, dim_player&#10;+ dbt tests (unique, not_null, relationships, recency)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+        <!-- gold gold -->
+        <mxCell id="gold" value="🥇 GOLD — gold.fct_match_participants&#10;partition: game_date (require-partition-filter)&#10;cluster: champion_id, queue_id&#10;incremental MERGE on (match_id, participant_id)&#10;+ dim_champion, dim_player&#10;+ dbt tests (unique, not_null, relationships, recency)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
           <mxGeometry x="880" y="900" width="330" height="120" as="geometry" />
         </mxCell>
 
@@ -103,7 +103,7 @@
         <mxCell id="e4" value="on failure" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ps" target="dlq">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e5" value="BigQuery subscription (no code, no Dataflow)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ps" target="raw">
+        <mxCell id="e5" value="BigQuery subscription (no code, no Dataflow)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="ps" target="bronze">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
@@ -111,16 +111,16 @@
         <mxCell id="e6" value="triggers (run.jobs.run)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="sch2" target="dbt">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e7" value="read raw (publish_time watermark)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="raw" target="stg">
+        <mxCell id="e7" value="read bronze (publish_time watermark)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="bronze" target="stg">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="stg" target="marts">
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="stg" target="gold">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" value="builds silver + gold" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;fontSize=10;" edge="1" parent="1" source="dbt" target="marts">
+        <mxCell id="e9" value="builds silver + gold" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;fontSize=10;" edge="1" parent="1" source="dbt" target="gold">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e10" value="query (game_date filter required)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="marts" target="looker">
+        <mxCell id="e10" value="query (game_date filter required)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="gold" target="looker">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>

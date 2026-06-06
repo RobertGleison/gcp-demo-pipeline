@@ -7,33 +7,33 @@ locals {
   pubsub_bq_member = "serviceAccount:${var.pubsub_bq_sa_email}"
 }
 
-# Pub/Sub -> BQ subscription writes landed rows into raw.
-resource "google_bigquery_dataset_iam_member" "pubsub_bq_raw_editor" {
+# Pub/Sub -> BQ subscription writes landed rows into bronze.
+resource "google_bigquery_dataset_iam_member" "pubsub_bq_bronze_editor" {
   project    = var.project_id
-  dataset_id = module.raw.dataset_id
+  dataset_id = module.bronze.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = local.pubsub_bq_member
 }
 
-# dbt reads raw (staging models SELECT from it) — read-only, least privilege.
-resource "google_bigquery_dataset_iam_member" "dbt_raw_viewer" {
+# dbt reads bronze (silver models SELECT from it) — read-only, least privilege.
+resource "google_bigquery_dataset_iam_member" "dbt_bronze_viewer" {
   project    = var.project_id
-  dataset_id = module.raw.dataset_id
+  dataset_id = module.bronze.dataset_id
   role       = "roles/bigquery.dataViewer"
   member     = local.dbt_member
 }
 
-# dbt builds staging + marts.
-resource "google_bigquery_dataset_iam_member" "dbt_staging_editor" {
+# dbt builds silver + gold.
+resource "google_bigquery_dataset_iam_member" "dbt_silver_editor" {
   project    = var.project_id
-  dataset_id = module.staging.dataset_id
+  dataset_id = module.silver.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = local.dbt_member
 }
 
-resource "google_bigquery_dataset_iam_member" "dbt_marts_editor" {
+resource "google_bigquery_dataset_iam_member" "dbt_gold_editor" {
   project    = var.project_id
-  dataset_id = module.marts.dataset_id
+  dataset_id = module.gold.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = local.dbt_member
 }

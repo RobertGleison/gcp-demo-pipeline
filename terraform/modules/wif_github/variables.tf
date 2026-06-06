@@ -6,6 +6,13 @@ variable "project_id" {
 variable "github_repository" {
   description = "GitHub repo allowed to impersonate the deployer SA, as owner/repo (e.g. RobertGleison/gcp-demo-pipeline)."
   type        = string
+
+  # This value becomes the provider's attribute_condition (the security gate on
+  # who may mint deployer-SA tokens), so a malformed value must fail fast.
+  validation {
+    condition     = can(regex("^[^/]+/[^/]+$", var.github_repository))
+    error_message = "github_repository must be in \"owner/repo\" form (exactly one slash)."
+  }
 }
 
 variable "pool_id" {

@@ -16,14 +16,14 @@ variable "topic_name" {
   default     = "lol-matches"
 }
 
-variable "raw_table_id" {
-  description = "Landing table in the raw dataset that the BigQuery subscription writes to. Created by this layer (Pub/Sub does not auto-create it)."
+variable "bronze_table_id" {
+  description = "Landing table in the bronze dataset that the BigQuery subscription writes to. Created by this layer (Pub/Sub does not auto-create it)."
   type        = string
-  default     = "matches_raw"
+  default     = "matches_bronze"
 }
 
-variable "raw_partition_expiration_days" {
-  description = "Days a daily partition of matches_raw is kept before BigQuery drops it. Raw is disposable (replayable from Pub/Sub), so partitions self-expire."
+variable "bronze_partition_expiration_days" {
+  description = "Days a daily partition of matches_bronze is kept before BigQuery drops it. bronze is disposable (replayable from Pub/Sub), so partitions self-expire."
   type        = number
   default     = 30
 }
@@ -85,8 +85,8 @@ variable "pubsub_bq_sa_email" {
   type        = string
 }
 
-variable "raw_dataset_id" {
-  description = "Raw landing dataset ID (from the warehouse module)."
+variable "bronze_dataset_id" {
+  description = "bronze landing dataset ID (from the warehouse module)."
   type        = string
 }
 

@@ -8,30 +8,30 @@ variable "bq_location" {
   type        = string
 }
 
-variable "raw_dataset" {
-  description = "Dataset ID for the bronze landing zone (raw match JSON)."
+variable "bronze_dataset" {
+  description = "Dataset ID for the bronze landing zone (bronze match JSON)."
   type        = string
-  default     = "raw"
+  default     = "bronze"
 }
 
-variable "staging_dataset" {
-  description = "Dataset ID for silver dbt staging models."
+variable "silver_dataset" {
+  description = "Dataset ID for silver dbt silver models."
   type        = string
-  default     = "staging"
+  default     = "silver"
 }
 
-variable "marts_dataset" {
-  description = "Dataset ID for gold dbt marts."
+variable "gold_dataset" {
+  description = "Dataset ID for gold dbt gold."
   type        = string
-  default     = "marts"
+  default     = "gold"
 }
 
 variable "dbt_sa_email" {
-  description = "dbt runtime SA email (from the iam module) — granted dataViewer on raw and dataEditor on staging/marts."
+  description = "dbt runtime SA email (from the iam module) — granted dataViewer on bronze and dataEditor on silver/gold."
   type        = string
 }
 
 variable "pubsub_bq_sa_email" {
-  description = "Pub/Sub->BQ subscription SA email (from the iam module) — granted dataEditor on raw."
+  description = "Pub/Sub->BQ subscription SA email (from the iam module) — granted dataEditor on bronze."
   type        = string
 }

@@ -29,14 +29,14 @@ variable "dlq_subscription_name" {
 # --- BigQuery write target ---------------------------------------------------
 
 variable "bq_dataset_id" {
-  description = "Dataset holding the landing table (the raw/bronze dataset)."
+  description = "Dataset holding the landing table (the bronze/bronze dataset)."
   type        = string
 }
 
 variable "bq_table_id" {
   description = "Existing table the subscription writes to. Pub/Sub does NOT create it — the owning layer must create it first with the metadata schema."
   type        = string
-  default     = "matches_raw"
+  default     = "matches_bronze"
 }
 
 variable "writer_sa_email" {
@@ -75,6 +75,12 @@ variable "max_delivery_attempts" {
   description = "Deliveries attempted before a message is dead-lettered to the DLQ topic (min 5)."
   type        = number
   default     = 5
+
+  # Pub/Sub rejects a dead_letter_policy with fewer than 5 attempts.
+  validation {
+    condition     = var.max_delivery_attempts >= 5
+    error_message = "max_delivery_attempts must be at least 5 (Pub/Sub's minimum for a dead-letter policy)."
+  }
 }
 
 variable "message_retention_duration" {

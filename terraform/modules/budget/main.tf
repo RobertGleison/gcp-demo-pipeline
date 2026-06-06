@@ -3,7 +3,7 @@
 # hard stop). With no all_updates_rule block, GCP emails the billing account's
 # admins and users when a threshold is crossed — no monitoring channel needed.
 
-data "google_project" "this" {
+data "google_project" "main" {
   project_id = var.project_id
 }
 
@@ -13,7 +13,7 @@ resource "google_billing_budget" "trial" {
 
   # Scope the budget to this project only (the billing account may fund others).
   budget_filter {
-    projects        = ["projects/${data.google_project.this.number}"]
+    projects        = ["projects/${data.google_project.main.number}"]
     calendar_period = "MONTH"
   }
 
