@@ -9,7 +9,7 @@
 #     secretAccessor, BigQuery), and
 #   - enabling run.googleapis.com / cloudscheduler.googleapis.com (apis.tf).
 
-resource "google_cloud_run_v2_job" "this" {
+resource "google_cloud_run_v2_job" "main" {
   name     = var.name
   location = var.region
   project  = var.project_id
@@ -66,6 +66,12 @@ resource "google_cloud_run_v2_job" "this" {
   }
 }
 
+# Renamed this -> main (HashiCorp style: a module's single resource is `main`).
+moved {
+  from = google_cloud_run_v2_job.this
+  to   = google_cloud_run_v2_job.main
+}
+
 # Cloud Scheduler triggers the job by POSTing to the Run Admin API's :run
 # endpoint, authenticating as sa-scheduler. Jobs need run.jobs.run (contained in
 # roles/run.invoker); scoped to this job only — least privilege.
@@ -73,8 +79,8 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
   count = var.create_scheduler ? 1 : 0
 
   project  = var.project_id
-  location = google_cloud_run_v2_job.this.location
-  name     = google_cloud_run_v2_job.this.name
+  location = google_cloud_run_v2_job.main.location
+  name     = google_cloud_run_v2_job.main.name
   role     = var.invoke_role
   member   = "serviceAccount:${var.scheduler_sa_email}"
 }
@@ -97,7 +103,7 @@ resource "google_cloud_scheduler_job" "trigger" {
     # v1 namespaces endpoint is the one Cloud Scheduler authenticates against for
     # jobs:run. oauth_token (not oidc) because the audience is a *.googleapis.com
     # Google API.
-    uri = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.this.name}:run"
+    uri = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.main.name}:run"
 
     oauth_token {
       service_account_email = var.scheduler_sa_email
