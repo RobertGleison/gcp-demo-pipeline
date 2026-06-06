@@ -7,7 +7,7 @@ locals {
 }
 
 module "bronze" {
-  source = "../bigquery_datasets"
+  source = "./bigquery_datasets"
 
   project_id                  = var.project_id
   dataset_id                  = var.bronze_dataset
@@ -17,7 +17,7 @@ module "bronze" {
 }
 
 module "silver" {
-  source = "../bigquery_datasets"
+  source = "./bigquery_datasets"
 
   project_id  = var.project_id
   dataset_id  = var.silver_dataset
@@ -26,7 +26,7 @@ module "silver" {
 }
 
 module "gold" {
-  source = "../bigquery_datasets"
+  source = "./bigquery_datasets"
 
   project_id  = var.project_id
   dataset_id  = var.gold_dataset

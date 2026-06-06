@@ -1,4 +1,4 @@
-# Dataset IDs are consumed directly by the ingest module (bronze subscription target)
+# Dataset IDs are consumed directly by the extraction module (bronze subscription target)
 # and the future transform module (dbt target datasets) via the root main.tf.
 
 output "bronze_dataset_id" {

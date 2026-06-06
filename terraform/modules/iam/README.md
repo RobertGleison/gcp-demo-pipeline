@@ -7,9 +7,9 @@ resource-scoped bindings live in the layer that owns the target resource:
 
 | SA | Resource-scoped grants | Granted in |
 |----|------------------------|------------|
-| `sa-extractor` | `pubsub.publisher` (topic) + `secretAccessor` (Riot key) | ingest |
+| `sa-extractor` | `pubsub.publisher` (topic) + `secretAccessor` (Riot key) | extraction |
 | `sa-dbt` | `bigquery.dataEditor` (datasets) | warehouse |
-| `sa-scheduler` | `run.jobs.run` (each job) | ingest / transform |
+| `sa-scheduler` | `run.jobs.run` (each job) | extraction / transform |
 | `sa-pubsub-bq` | `bigquery.dataEditor` (bronze) | warehouse |
 
 The CD deployer SA (`sa-gh-deployer`) is **not** here — it lives in the cicd layer.

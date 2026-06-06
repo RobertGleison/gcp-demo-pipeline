@@ -1,9 +1,9 @@
-# ingest
+# extraction
 
-The ingest layer wires the extractor to the warehouse:
+The extraction layer wires the extractor to the warehouse:
 
 - the **landing table** `matches_bronze` (Pub/Sub does not auto-create it),
-- a **topic + DLQ + BigQuery subscription** (via the `pubsub_bq` submodule),
+- a **topic + DLQ + BigQuery subscription** (via the `pubsub` submodule),
 - the **extractor Cloud Run Job + Scheduler trigger** (via the `cloudrun_job` submodule),
 - the **Riot API key secret** (created empty; value added by hand), and
 - the least-privilege bindings the workload SAs need (publisher on the topic,
@@ -12,8 +12,8 @@ The ingest layer wires the extractor to the warehouse:
 ## Usage
 
 ```hcl
-module "ingest" {
-  source = "../../modules/ingest"
+module "extraction" {
+  source = "../../modules/extraction"
 
   project_id      = var.project_id
   region          = var.region
@@ -41,7 +41,7 @@ module "ingest" {
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| project_id | Project that owns the ingest resources. | `string` | n/a | yes |
+| project_id | Project that owns the extraction resources. | `string` | n/a | yes |
 | region | Pipeline region (must align with the BQ location's region). | `string` | n/a | yes |
 | topic_name | Main topic the extractor publishes to. | `string` | `"lol-matches"` | no |
 | bronze_table_id | Landing table in the bronze dataset. | `string` | `"matches_bronze"` | no |
@@ -71,5 +71,5 @@ module "ingest" {
 
 ## Submodules
 
-- [`pubsub_bq`](../pubsub_bq) — topic, DLQ, and BigQuery subscription.
-- [`cloudrun_job`](../cloudrun_job) — extractor job and its scheduler trigger.
+- [`pubsub`](./pubsub) — topic, DLQ, and BigQuery subscription.
+- [`cloudrun_job`](./cloudrun_job) — extractor job and its scheduler trigger.

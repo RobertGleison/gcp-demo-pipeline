@@ -31,7 +31,7 @@ resource "google_bigquery_table" "matches_bronze" {
 # Topic + DLQ + BigQuery subscription. Writes as sa-pubsub-bq (custom-SA path);
 # that SA already has bigquery.dataEditor on bronze (granted in the warehouse layer).
 module "pubsub" {
-  source = "../pubsub_bq"
+  source = "./pubsub"
 
   project_id      = var.project_id
   topic_name      = var.topic_name

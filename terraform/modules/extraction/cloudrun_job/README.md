@@ -12,7 +12,7 @@ granting the runtime SA its resource-scoped roles, and enabling
 
 ```hcl
 module "extractor" {
-  source = "../cloudrun_job"
+  source = "./cloudrun_job"
 
   project_id            = var.project_id
   region                = var.region

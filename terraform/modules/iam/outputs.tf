@@ -1,9 +1,9 @@
-# SA emails are consumed directly by the warehouse and ingest modules via the
+# SA emails are consumed directly by the warehouse and extraction modules via the
 # root main.tf (no remote state). Resource-scoped role bindings are attached
 # by those modules.
 
 output "extractor_sa_email" {
-  description = "Extractor runtime SA — granted pubsub.publisher + secretAccessor in the ingest layer."
+  description = "Extractor runtime SA — granted pubsub.publisher + secretAccessor in the extraction layer."
   value       = module.extractor.email
 }
 
@@ -13,7 +13,7 @@ output "dbt_sa_email" {
 }
 
 output "scheduler_sa_email" {
-  description = "Cloud Scheduler SA — granted run.jobs.run in the ingest / transform layers."
+  description = "Cloud Scheduler SA — granted run.jobs.run in the extraction / transform layers."
   value       = module.scheduler.email
 }
 

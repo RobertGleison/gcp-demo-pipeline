@@ -9,7 +9,7 @@ not here.
 
 ```hcl
 module "bronze" {
-  source = "../bigquery_datasets"
+  source = "./bigquery_datasets"
 
   project_id                  = var.project_id
   dataset_id                  = "bronze"

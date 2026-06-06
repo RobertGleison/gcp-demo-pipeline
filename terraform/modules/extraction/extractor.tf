@@ -2,7 +2,7 @@
 # cloudrun_job module). Runs as sa-extractor; reads the Riot key from Secret
 # Manager and publishes to the Pub/Sub topic above.
 module "extractor" {
-  source = "../cloudrun_job"
+  source = "./cloudrun_job"
 
   project_id            = var.project_id
   region                = var.region
