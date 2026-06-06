@@ -11,11 +11,11 @@ locals {
     "iamcredentials.googleapis.com",       # cicd (WIF)
     "sts.googleapis.com",                  # cicd (WIF)
     "cloudresourcemanager.googleapis.com", # cicd + iam
-    "run.googleapis.com",                  # ingest
-    "cloudscheduler.googleapis.com",       # ingest
-    "pubsub.googleapis.com",               # ingest
-    "secretmanager.googleapis.com",        # ingest
-    "bigquery.googleapis.com",             # warehouse + ingest
+    "run.googleapis.com",                  # extraction
+    "cloudscheduler.googleapis.com",       # extraction
+    "pubsub.googleapis.com",               # extraction
+    "secretmanager.googleapis.com",        # extraction
+    "bigquery.googleapis.com",             # warehouse + extraction
   ]
 }
 

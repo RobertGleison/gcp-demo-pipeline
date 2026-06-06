@@ -3,7 +3,7 @@
 # extractor from the warehouse and gives at-least-once delivery (dupes are made
 # harmless downstream by dbt's idempotent MERGE).
 #
-# The owning layer (ingest) is responsible for:
+# The owning layer (extraction) is responsible for:
 #   - creating the target BQ table first (Pub/Sub will NOT create it),
 #   - granting writer_sa_email bigquery.dataEditor on the dataset (warehouse layer),
 #   - granting sa-extractor pubsub.publisher on the topic, and

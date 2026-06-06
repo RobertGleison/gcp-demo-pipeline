@@ -1,4 +1,4 @@
-# Shared locals for the ingest layer.
+# Shared locals for the extraction layer.
 locals {
   # Extractor image: <repo-prefix>/extractor:<tag>. Repo prefix injected from the
   # cicd module; CD must have pushed this tag first.

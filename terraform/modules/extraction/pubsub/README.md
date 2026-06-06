@@ -1,4 +1,4 @@
-# pubsub_bq
+# pubsub
 
 Pub/Sub ingest with a **BigQuery subscription**: a topic plus a DLQ and a no-code
 subscription that lands each message straight into BigQuery. Decouples the
@@ -13,7 +13,7 @@ the producer `pubsub.publisher` on the topic, and enable `pubsub.googleapis.com`
 
 ```hcl
 module "pubsub" {
-  source = "../pubsub_bq"
+  source = "./pubsub"
 
   project_id      = var.project_id
   topic_name      = "lol-matches"

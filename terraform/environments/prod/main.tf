@@ -49,8 +49,8 @@ module "warehouse" {
   depends_on = [google_project_service.services]
 }
 
-module "ingest" {
-  source = "../../modules/ingest"
+module "extraction" {
+  source = "../../modules/extraction"
 
   project_id                       = var.project_id
   region                           = var.region
@@ -72,4 +72,11 @@ module "ingest" {
   artifact_registry_repo = module.cicd.artifact_registry_repo
 
   depends_on = [google_project_service.services]
+}
+
+# The ingest module was renamed to extraction. Migrate the existing state
+# subtree in place (no destroy/recreate).
+moved {
+  from = module.ingest
+  to   = module.extraction
 }

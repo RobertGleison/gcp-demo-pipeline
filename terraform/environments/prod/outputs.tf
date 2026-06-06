@@ -15,10 +15,10 @@ output "deployer_sa_email" {
 
 output "extractor_job_name" {
   description = "Extractor Cloud Run Job name."
-  value       = module.ingest.extractor_job_name
+  value       = module.extraction.extractor_job_name
 }
 
 output "topic_id" {
   description = "Main Pub/Sub topic the extractor publishes to."
-  value       = module.ingest.topic_id
+  value       = module.extraction.topic_id
 }

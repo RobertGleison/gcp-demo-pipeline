@@ -9,7 +9,7 @@ genuinely project-wide roles.
 
 ```hcl
 module "dbt" {
-  source = "../service_account"
+  source = "./service_account"
 
   project_id   = var.project_id
   account_id   = "sa-dbt"

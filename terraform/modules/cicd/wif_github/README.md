@@ -9,7 +9,7 @@ configured repo may use the provider (`attribute_condition`).
 
 ```hcl
 module "wif_github" {
-  source = "../wif_github"
+  source = "./wif_github"
 
   project_id        = var.project_id
   github_repository = "RobertGleison/gcp-demo-pipeline"

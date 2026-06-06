@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCP project ID that owns the ingest resources."
+  description = "GCP project ID that owns the extraction resources."
   type        = string
 }
 
