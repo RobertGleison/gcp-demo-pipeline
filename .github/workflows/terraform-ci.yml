@@ -1,0 +1,48 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TFLINT_CONFIG_FILE: ${{ github.workspace }}/terraform/.tflint.hcl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: TFLint init
+        run: tflint --init
+
+      - name: TFLint
+        run: tflint --recursive
+
+      - name: Terraform init
+        run: terraform init -backend=false
+        working-directory: terraform/environments/prod
+
+      - name: Terraform validate
+        run: terraform validate
+        working-directory: terraform/environments/prod
