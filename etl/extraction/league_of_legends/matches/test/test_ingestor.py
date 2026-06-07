@@ -1,7 +1,7 @@
 import requests
 import pytest
 
-from extraction.league_of_legends.matches.ingestor import RiotGamesIngestor
+from etl.extraction.league_of_legends.matches.ingestor import RiotGamesIngestor
 
 
 class FakeResponse:
@@ -75,7 +75,7 @@ class TestGet:
         slept = []
         monkeypatch.setattr(ingestor.session, "get", fake_get)
         monkeypatch.setattr(
-            "extraction.league_of_legends.matches.ingestor.time.sleep",
+            "etl.extraction.league_of_legends.matches.ingestor.time.sleep",
             lambda s: slept.append(s),
         )
 
@@ -95,7 +95,7 @@ class TestGet:
             ingestor.session, "get", lambda url, params=None: responses.pop(0)
         )
         monkeypatch.setattr(
-            "extraction.league_of_legends.matches.ingestor.time.sleep",
+            "etl.extraction.league_of_legends.matches.ingestor.time.sleep",
             lambda s: slept.append(s),
         )
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from extraction.league_of_legends.matches.producer import MatchProducer
+from etl.extraction.league_of_legends.matches.producer import MatchProducer
 
 TOPIC = "projects/demo/topics/matches"
 

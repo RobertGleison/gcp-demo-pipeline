@@ -17,7 +17,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "extraction/**"
+      - "etl/extraction/**"
       - ".github/workflows/extraction-cd.yml"
 
 # Keyless auth: GitHub mints an OIDC token, WIF exchanges it for short-lived GCP
@@ -68,7 +68,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: extraction/Dockerfile
+          file: etl/extraction/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
