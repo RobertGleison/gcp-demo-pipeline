@@ -9,3 +9,15 @@ dependencies = [
     "google-cloud-pubsub>=2.39.0",
     "requests>=2.34.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+# Modules are imported as namespace packages rooted at the repo root
+# (e.g. extraction.league_of_legends.matches.ingestor), so put the repo
+# root — the parent of this extraction/ dir — on sys.path.
+pythonpath = [".."]
+testpaths = ["league_of_legends/matches/test"]
