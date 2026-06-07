@@ -1,12 +1,12 @@
 # Riot LoL match extractor.
-# Run from the repo root: the `extraction.league_of_legends.matches` package
-# imports require the repo root as CWD, while `uv run --project extraction`
-# resolves dependencies from the extraction/ project venv.
+# Run from the repo root: the `etl.extraction.league_of_legends.matches` package
+# imports require the repo root as CWD, while `uv run --project etl/extraction`
+# resolves dependencies from the etl/extraction/ project venv.
 #
 # Pass extra flags via ARGS, e.g.  make dryrun ARGS="--count 10"
 
-MODULE := extraction.league_of_legends.matches.main
-UV     := uv run --project extraction
+MODULE := etl.extraction.league_of_legends.matches.main
+UV     := uv run --project etl/extraction
 
 .PHONY: run dryrun
 

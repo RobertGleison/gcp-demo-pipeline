@@ -17,7 +17,7 @@ dev = [
 
 [tool.pytest.ini_options]
 # Modules are imported as namespace packages rooted at the repo root
-# (e.g. extraction.league_of_legends.matches.ingestor), so put the repo
-# root — the parent of this extraction/ dir — on sys.path.
-pythonpath = [".."]
+# (e.g. etl.extraction.league_of_legends.matches.ingestor), so put the repo
+# root — two levels up from this etl/extraction/ dir — on sys.path.
+pythonpath = ["../.."]
 testpaths = ["league_of_legends/matches/test"]

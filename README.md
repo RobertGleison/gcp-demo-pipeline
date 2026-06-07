@@ -8,7 +8,7 @@ of Legends match data from the Riot Games API. This is a MVP working demo and no
 ```mermaid
 flowchart TB
     subgraph github["GitHub"]
-        GH["Repository<br/>(extraction + terraform)"]
+        GH["Repository<br/>(etl + terraform)"]
     end
 
     RIOT["Riot Games API<br/>account-v1 + match-v5"]
@@ -116,11 +116,12 @@ gcp-demo-pipeline/
 │       ├── iam/                #   └ service_account/     (nested helper)
 │       ├── warehouse/          #   └ bigquery_datasets/   (nested helper)
 │       └── extraction/         #   └ cloudrun_job/ + pubsub/ (nested helpers)
-├── extraction/                 # the Python extractor (Cloud Run Job source)
-│   ├── league_of_legends/matches/{main,ingestor,producer}.py
-│   ├── Dockerfile
-│   ├── pyproject.toml / uv.lock
-│   └── .env                    # local dev only (git-ignored)
+├── etl/                        # data pipeline source
+│   └── extraction/             # the Python extractor (Cloud Run Job source)
+│       ├── league_of_legends/matches/{main,ingestor,producer}.py
+│       ├── Dockerfile
+│       ├── pyproject.toml / uv.lock
+│       └── .env                # local dev only (git-ignored)
 └── docs/                       # design specs
 ```
 
@@ -265,8 +266,8 @@ job — nothing more.
 
 ## The extractor
 
-Source: `extraction/league_of_legends/matches/`. Run as a module from the repo
-root: `python -m extraction.league_of_legends.matches.main`.
+Source: `etl/extraction/league_of_legends/matches/`. Run as a module from the repo
+root: `python -m etl.extraction.league_of_legends.matches.main`.
 
 ### What it extracts from the Riot API
 
@@ -374,7 +375,7 @@ terraform -chdir=terraform/environments/prod apply \
 
 # 2. Build + push the extractor image (linux/amd64 — required by Cloud Run).
 gcloud auth configure-docker $REGION-docker.pkg.dev
-docker buildx build --platform linux/amd64 -f extraction/Dockerfile -t "$IMAGE" --push .
+docker buildx build --platform linux/amd64 -f etl/extraction/Dockerfile -t "$IMAGE" --push .
 
 # 3. Add the Riot API key value (dev keys expire ~daily — re-run to refresh).
 echo -n "RGAPI-your-dev-key" | gcloud secrets versions add riot-api-key \
@@ -418,7 +419,7 @@ Designed in the spec, **not yet implemented**:
   build `silver.*` (silver) and `gold.*` (gold) with incremental `MERGE`,
   partitioning/clustering, and dbt tests. The datasets already exist.
 - **GitHub Actions CI/CD** — keyless (WIF) image build + push on every push to
-  `extraction/**`, replacing the manual `docker buildx` step. The WIF pool,
+  `etl/extraction/**`, replacing the manual `docker buildx` step. The WIF pool,
   provider, and deployer SA are already provisioned by `cicd`/`wif_github`.
 - **Looker Studio dashboards** — win rate by champion, KDA distributions,
   per-player scorecards (no Terraform provider exists; built in the console).
