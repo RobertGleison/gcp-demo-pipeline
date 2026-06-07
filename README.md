@@ -111,6 +111,11 @@ gcp-demo-pipeline/
 │   │   ├── terraform.tfvars    # non-secret config (committed)
 │   │   └── common.auto.tfvars  # project_id + billing_account (git-ignored)
 │   └── modules/                # reusable building blocks (see below)
+│       ├── budget/
+│       ├── cicd/               #   └ wif_github/          (nested helper)
+│       ├── iam/                #   └ service_account/     (nested helper)
+│       ├── warehouse/          #   └ bigquery_datasets/   (nested helper)
+│       └── extraction/         #   └ cloudrun_job/ + pubsub/ (nested helpers)
 ├── extraction/                 # the Python extractor (Cloud Run Job source)
 │   ├── league_of_legends/matches/{main,ingestor,producer}.py
 │   ├── Dockerfile
@@ -133,33 +138,37 @@ Every module is provider-only and stateless; the `environments/prod` root owns
 the single state file and composes them. All depend on the project APIs enabled
 once in `apis.tf`.
 
-| Module                  | What it provisions                                                                                                                                                                                                                                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`budget`**            | A monthly `google_billing_budget` cost-alert on the project. Alerts only (it never stops spend) at configurable thresholds (default 25% / 50% / 100% of the budget amount).                                                                                                                                                                |
-| **`cicd`**              | An **Artifact Registry** Docker repo (`pipeline-images`) for the container images, plus the deployer's `artifactregistry.writer` grant. Wraps `wif_github`.                                                                                                                                                                                |
-| **`wif_github`**        | **Workload Identity Federation** for keyless GitHub Actions auth: an OIDC pool + provider (scoped to this exact repo via an attribute condition) and a `sa-gh-deployer` service account GitHub can impersonate. **No JSON keys.**                                                                                                          |
-| **`iam`**               | Creates the four runtime **service accounts** via `service_account`: `sa-extractor`, `sa-dbt`, `sa-scheduler`, `sa-pubsub-bq`. Only genuinely project-wide roles are granted here; resource-scoped bindings live with the resources.                                                                                                       |
-| **`service_account`**   | Generic helper: one `google_service_account` + optional project-level role bindings.                                                                                                                                                                                                                                                       |
-| **`warehouse`**         | The three **BigQuery datasets** — `bronze` (bronze, 30-day table expiry), `silver` (silver), `gold` (gold) — via `bigquery_datasets`, plus dataset-scoped IAM (Pub/Sub-BQ SA → editor on `bronze`; dbt SA → viewer on `bronze`, editor on `silver`/`gold`).                                                                                |
-| **`bigquery_datasets`** | Generic helper: a single `google_bigquery_dataset` with optional default table expiration. Tables (and their partitioning/clustering) are created by the _writers_, not here.                                                                                                                                                              |
-| **`ingest`**            | The heart of the pipeline. Creates the `matches_bronze` landing table, the Riot-key **Secret Manager** secret (empty, scoped to `sa-extractor`), the Pub/Sub topic + DLQ + BQ subscription (via `pubsub_bq`), and the **extractor Cloud Run Job + Scheduler** (via `cloudrun_job`). Grants `sa-extractor` `pubsub.publisher` on the topic. |
-| **`pubsub_bq`**         | Generic Pub/Sub landing: a topic, a **BigQuery subscription** that writes straight to a table, a dead-letter topic + subscription, and the Pub/Sub service-agent IAM needed for BQ writes and dead-lettering.                                                                                                                              |
-| **`cloudrun_job`**      | Generic **Cloud Run v2 Job** + optional **Cloud Scheduler** trigger. Supports plain env vars, Secret Manager-backed env vars, command/args overrides, and CPU/memory/retry/timeout knobs. Reused by the extractor (and, when built, dbt).                                                                                                  |
+Generic helper modules are **nested inside the one composite that consumes them**
+(e.g. `iam/service_account`); they're private building blocks, not meant to be
+called directly from the root.
+
+| Module                            | What it provisions                                                                                                                                                                                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`budget`**                      | A monthly `google_billing_budget` cost-alert on the project. Alerts only (it never stops spend) at configurable thresholds (default 25% / 50% / 100% of the budget amount).                                                                                                                                                        |
+| **`cicd`**                        | An **Artifact Registry** Docker repo (`pipeline-images`) for the container images, plus the deployer's `artifactregistry.writer` grant. Wraps `cicd/wif_github`.                                                                                                                                                                   |
+| └ **`cicd/wif_github`**           | **Workload Identity Federation** for keyless GitHub Actions auth: an OIDC pool + provider (scoped to this exact repo via an attribute condition) and a `sa-gh-deployer` service account GitHub can impersonate. **No JSON keys.**                                                                                                  |
+| **`iam`**                         | Creates the four runtime **service accounts** via `iam/service_account`: `sa-extractor`, `sa-dbt`, `sa-scheduler`, `sa-pubsub-bq`. Only genuinely project-wide roles are granted here; resource-scoped bindings live with the resources.                                                                                            |
+| └ **`iam/service_account`**       | Generic helper: one `google_service_account` + optional project-level role bindings.                                                                                                                                                                                                                                              |
+| **`warehouse`**                   | The three **BigQuery datasets** — `bronze` (bronze, 30-day table expiry), `silver` (silver), `gold` (gold) — via `warehouse/bigquery_datasets`, plus dataset-scoped IAM (Pub/Sub-BQ SA → editor on `bronze`; dbt SA → viewer on `bronze`, editor on `silver`/`gold`).                                                              |
+| └ **`warehouse/bigquery_datasets`** | Generic helper: a single `google_bigquery_dataset` with optional default table expiration. Tables (and their partitioning/clustering) are created by the _writers_, not here.                                                                                                                                                    |
+| **`extraction`**                  | The heart of the pipeline. Creates the `matches_bronze` landing table, the Riot-key **Secret Manager** secret (empty, scoped to `sa-extractor`), the Pub/Sub topic + DLQ + BQ subscription (via `extraction/pubsub`), and the **extractor Cloud Run Job + Scheduler** (via `extraction/cloudrun_job`). Grants `sa-extractor` `pubsub.publisher` on the topic. |
+| └ **`extraction/pubsub`**         | Generic Pub/Sub landing: a topic, a **BigQuery subscription** that writes straight to a table, a dead-letter topic + subscription, and the Pub/Sub service-agent IAM needed for BQ writes and dead-lettering.                                                                                                                      |
+| └ **`extraction/cloudrun_job`**   | Generic **Cloud Run v2 Job** + optional **Cloud Scheduler** trigger. Supports plain env vars, Secret Manager-backed env vars, command/args overrides, and CPU/memory/retry/timeout knobs. Reused by the extractor (and, when built, dbt).                                                                                          |
 
 ### Module wiring
 
 ```mermaid
 flowchart LR
     APIS["apis.tf<br/>(project services)"] --> ALL[(all modules)]
-    CICD[cicd] --> WIF[wif_github]
-    IAM[iam] --> SA[service_account ×4]
-    CICD -- artifact_registry_repo --> INGEST[ingest]
-    IAM -- extractor_sa / scheduler_sa --> INGEST
+    CICD[cicd] --> WIF["cicd/wif_github"]
+    IAM[iam] --> SA["iam/service_account ×4"]
+    CICD -- artifact_registry_repo --> EXTRACTION[extraction]
+    IAM -- extractor_sa / scheduler_sa --> EXTRACTION
     IAM -- dbt_sa / pubsub_bq_sa --> WH[warehouse]
-    WH -- bronze_dataset_id --> INGEST
-    INGEST --> PUBSUB[pubsub_bq]
-    INGEST --> CRJ[cloudrun_job]
-    WH --> BQDS[bigquery_datasets ×3]
+    WH -- bronze_dataset_id --> EXTRACTION
+    EXTRACTION --> PUBSUB["extraction/pubsub"]
+    EXTRACTION --> CRJ["extraction/cloudrun_job"]
+    WH --> BQDS["warehouse/bigquery_datasets ×3"]
     BUDGET[budget]
 ```
 
@@ -198,8 +207,8 @@ one topic, secret, job, or dataset, never project-wide:
 
 | Service account  | Runs as the identity for  | Roles granted                                                                       | Scoped to                              | Granted in            |
 | ---------------- | ------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------- | --------------------- |
-| **sa-extractor** | Extractor Cloud Run Job   | `secretmanager.secretAccessor`<br/>`pubsub.publisher`                               | `riot-api-key` secret<br/>`lol-matches` topic | `ingest`        |
-| **sa-scheduler** | Cloud Scheduler trigger   | `run.invoker` (incl. `run.jobs.run`)                                                | the extractor job (`:run`)             | `cloudrun_job`        |
+| **sa-extractor** | Extractor Cloud Run Job   | `secretmanager.secretAccessor`<br/>`pubsub.publisher`                               | `riot-api-key` secret<br/>`lol-matches` topic | `extraction`    |
+| **sa-scheduler** | Cloud Scheduler trigger   | `run.invoker` (incl. `run.jobs.run`)                                                | the extractor job (`:run`)             | `extraction/cloudrun_job` |
 | **sa-pubsub-bq** | Pub/Sub → BQ subscription | `bigquery.dataEditor`                                                               | `bronze` dataset                       | `warehouse`           |
 | **sa-dbt**       | dbt Cloud Run Job _(planned)_ | `bigquery.jobUser` _(project-wide)_<br/>`bigquery.dataViewer`<br/>`bigquery.dataEditor` | project<br/>`bronze`<br/>`silver` + `gold` | `iam` + `warehouse` |
 
@@ -361,7 +370,7 @@ IMAGE=$REGION-docker.pkg.dev/$PROJECT/pipeline-images/extractor:latest
 #    once — it'll create these and then fail on the extractor; that's expected.
 terraform -chdir=terraform/environments/prod init
 terraform -chdir=terraform/environments/prod apply \
-  -target=module.cicd -target=module.ingest.google_secret_manager_secret.riot_api_key
+  -target=module.cicd -target=module.extraction.google_secret_manager_secret.riot_api_key
 
 # 2. Build + push the extractor image (linux/amd64 — required by Cloud Run).
 gcloud auth configure-docker $REGION-docker.pkg.dev
