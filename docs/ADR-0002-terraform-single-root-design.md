@@ -98,11 +98,16 @@ cloudresourcemanager, run, cloudscheduler, pubsub, secretmanager, bigquery
 
 Modules `depends_on` the root API enablement (`google_project_service.services`).
 
-### Decision 3 — composition modules don't declare a provider
+### Decision 3 — version constraints and the provider live only in the root
 
-Each new composition module gets a minimal `versions.tf` (`required_providers`)
-but **no** `provider` block — providers are configured once at the root and
-inherit down. Leaf modules already follow this.
+`required_version` and `required_providers` are declared **once**, in the root
+(`environments/prod/versions.tf`); no child module — composition or leaf —
+redeclares them or configures a `provider` block. Providers are configured once
+at the root and inherit down.
+
+Because the `recommended` TFLint preset expects every module to carry its own
+constraints, the `terraform_required_version` and `terraform_required_providers`
+rules are disabled in `terraform/.tflint.hcl` to match this single-root layout.
 
 ### Decision 4 — migration: destroy & recreate (no state surgery)
 
