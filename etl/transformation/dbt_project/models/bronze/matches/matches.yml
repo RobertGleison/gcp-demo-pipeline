@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: matches
+    description: Unaltered data from the Pub/Sub subscription.
+    columns:
+      - name: message_id
+        data_type: string
+        description: Pub/Sub message ID of the retained delivery.
+        data_tests:
+          - unique
+          - not_null
+      - name: subscription_name
+        data_type: string
+        description: Pub/Sub subscription that delivered the retained message.
+        data_tests:
+          - not_null
+      - name: publish_time
+        data_type: timestamp
+        description: Publish time of the retained (latest) delivery.
+        data_tests:
+          - not_null
+      - name: match_json
+        data_type: string
+        description: Full match JSON payload (the source `data` column); parsed in silver.
+        data_tests:
+          - not_null

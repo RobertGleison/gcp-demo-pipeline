@@ -94,6 +94,30 @@ module) but nothing populates them yet.
 live in `us-central1`; BigQuery is in the `US` multi-region. These must stay
 aligned — a Pub/Sub BigQuery subscription **cannot write across regions**.
 
+### Storage: native BigQuery tables, not a GCS data lake
+
+Every layer (`bronze`/`silver`/`gold`) is a **native BigQuery table** — data
+lives in BigQuery's own managed columnar storage (Capacitor format on Colossus),
+not in GCS buckets. We deliberately did **not** build a file-based data lake.
+
+A lake-per-layer is possible on GCP — swap the BigQuery subscription for a
+**Pub/Sub → Cloud Storage subscription** (writes messages straight to a bucket,
+no code) and read each layer through external/BigLake tables. We skip it because:
+
+- **Native tables are simpler and faster** — clustering, caching, and partition
+  pruning come for free; external tables give up most of that.
+- **dbt is native-table-first.** Materializing `silver`/`gold` as incremental
+  `MERGE` models into managed tables is first-class; writing dbt output back out
+  as GCS files is not. A pure-file lake would fight the transform layer.
+- **At demo scale the lake's payoff (cheap open-format archive, engine
+  portability) doesn't justify the added moving parts** — file partitioning,
+  compaction, external-table refresh, BigLake/Iceberg setup and IAM.
+
+If a replayable open-format raw archive is ever needed, the pragmatic hybrid is
+to land only **bronze** in GCS (Cloud Storage subscription) and keep
+`silver`/`gold` as dbt-built native tables — best of both with minimal extra
+complexity.
+
 ---
 
 ## Repository layout

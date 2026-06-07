@@ -1,0 +1,25 @@
+
+name: 'dbt_project'
+version: '1.0.0'
+profile: 'dbt_project'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+
+# BigQuery dataset (schema) per medallion layer. Referenced from model
+# configs via var('bronze' | 'silver' | 'gold'). Override per environment
+# with --vars if the dataset names differ.
+vars:
+  bronze: bronze
+  silver: silver
+  gold: gold
+
+models:
+  dbt_project:
+    +materialized: view  # default; individual models override (e.g. matches -> table)

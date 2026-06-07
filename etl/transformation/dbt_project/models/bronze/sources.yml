@@ -1,0 +1,37 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: >
+      Raw Pub/Sub messages landed by the BigQuery subscription.
+      Disposable and replayable from Pub/Sub — not the source of truth.
+    database: project-5a3b1a75-500c-4b93-9e1
+    schema: bronze                           
+    tables:
+      - name: matches_bronze
+        description: >
+          One row per delivered Pub/Sub message. The full match JSON lands in
+          `data` and is parsed downstream in silver. Partitioned by `publish_time`.
+        columns:
+          - name: subscription_name
+            data_type: string
+            description: Pub/Sub subscription that delivered the message.
+          - name: message_id
+            data_type: string
+            description: Pub/Sub message ID — unique per delivered message.
+            data_tests:
+              - unique
+              - not_null
+          - name: publish_time
+            data_type: timestamp
+            description: Time the message was published to the topic; bronze partition key.
+            data_tests:
+              - not_null
+          - name: attributes
+            data_type: json
+            description: Message attributes — match_id, platform, queue_id.
+          - name: data
+            data_type: string
+            description: Message body — the full match JSON, parsed in silver.
+            data_tests:
+              - not_null
